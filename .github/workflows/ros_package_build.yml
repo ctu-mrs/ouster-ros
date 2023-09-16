@@ -5,9 +5,6 @@ on:
   push:
     branches: [ mrs ]
 
-  pull_request:
-    branches: [ mrs ]
-
   workflow_dispatch:
 
 concurrency:
