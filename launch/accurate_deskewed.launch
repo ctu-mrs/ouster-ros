@@ -2,8 +2,6 @@
 
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
 
-  <arg name="deskew_fixed_frame" default="" />
-
   <arg name="debug" default="false" />
   <arg unless="$(arg debug)" name="launch_prefix" value=""/>
   <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch"/>
@@ -50,7 +48,7 @@
   <!--     args="manager"/> -->
   <!-- </group> -->
 
-    <node unless="$(arg replay)" pkg="nodelet" type="nodelet" name="os_nodelet"
+    <node unless="$(arg replay)" pkg="nodelet" type="nodelet" name="os_nodelet_adeskewed"
       output="screen" required="true"
       launch-prefix="$(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterSensor $(arg nodelet_manager)">
@@ -75,44 +73,41 @@
       <remap from="uav_status" to="mrs_uav_status/display_string" />
     </node>
 
-    <node if="$(arg replay)" pkg="nodelet" type="nodelet" name="os_replay"
+    <node if="$(arg replay)" pkg="nodelet" type="nodelet" name="os_replay_adeskewed"
       output="screen" required="true"
       launch-prefix="$(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterReplay $(arg nodelet_manager)">
       <param name="~/metadata" value="$(arg metadata)"/>
-      <remap from="get_metadata" to="os_nodelet/get_metadata" />
+      <remap from="get_metadata" to="/$(env UAV_NAME)/os_nodelet/get_metadata" />
     </node>
 
   <!-- <group ns="$(arg ouster_ns)"> -->
     <!-- The driver may not start if os_cloud_nodelet launches before os_nodelet -->
-    <node pkg="nodelet" type="nodelet" name="os_cloud_nodelet"
+    <node pkg="nodelet" type="nodelet" name="os_cloud_nodelet_adeskewed"
       output="screen" required="true"
       launch-prefix="bash -c 'sleep 2; $0 $@' $(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterCloud $(arg nodelet_manager)">
-      <!-- <param name="fixed_frame" type="str" value="$(arg UAV_NAME)/accurate_origin"/> -->
-      <param name="fixed_frame" type="str" value="$(arg deskew_fixed_frame)"/>
+      <param name="fixed_frame" type="str" value="$(arg UAV_NAME)/accurate_origin"/>
       <param name="~/tf_prefix" type="str" value="$(arg tf_prefix)"/>
       <param name="~/timestamp_mode" type="str" value="$(arg timestamp_mode)"/>
       <remap from="os_config" to="os_nodelet/os_config"/>
       <remap from="lidar_packets" to="os_nodelet/lidar_packets"/>
       <remap from="imu_packets" to="os_nodelet/imu_packets"/>
       <remap from="imu" to="~imu"/>
-      <remap from="points" to="~points"/>
+      <remap from="points" to="~points_adeskewed"/>
       <remap from="is_alive" to="~is_alive"/>
-      <remap from="get_config" to="os_nodelet/get_config" />
-      <remap from="get_metadata" to="os_nodelet/get_metadata" />
+      <remap from="get_config" to="/$(env UAV_NAME)/os_nodelet/get_config" />
+      <remap from="get_metadata" to="/$(env UAV_NAME)/os_nodelet/get_metadata" />
     </node>
   <!-- </group> -->
 
   <!-- <group ns="$(arg ouster_ns)"> -->
-    <node if="$(arg image)" pkg="nodelet" type="nodelet" name="os_img_nodelet"
+    <node if="$(arg image)" pkg="nodelet" type="nodelet" name="os_img_nodelet_adeskewed"
       output="screen" required="true"
-      launch-prefix="bash -c 'sleep 3; $0 $@' $(arg launch_prefix)"
+      launch-prefix="$(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterImage $(arg nodelet_manager)">
-      <remap from="~os_config" to="os_nodelet/os_config"/>
-      <remap from="~points" to="os_cloud_nodelet/points"/>
-      <remap from="~get_config" to="os_nodelet/get_config" />
-      <remap from="~get_metadata" to="os_nodelet/get_metadata" />
+      <remap from="os_config" to="os_nodelet/os_config"/>
+      <remap from="points" to="os_cloud_nodelet/points"/>
     </node>
   <!-- </group> -->
   </group>
