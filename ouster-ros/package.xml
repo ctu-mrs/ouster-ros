@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format2.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>ouster_ros</name>
+  <name>mrs_ouster_ros</name>
   <version>0.13.10</version>
   <description>Ouster ROS2 driver</description>
   <maintainer email="oss@ouster.io">ouster developers</maintainer>
