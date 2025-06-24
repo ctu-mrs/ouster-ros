@@ -175,7 +175,7 @@ def main():
     # 5. Output result
     if QUIET_MODE:
         # Machine readable format
-        print(f"{sensor_serial} {sensor_ip}")
+        print(f"{sensor_serial} {sensor_ip} {interface_ip}")
     else:
         # Human readable format
         log(f"\nResult:")
