@@ -50,7 +50,7 @@ def execute_script_and_launch(context):
     udp_dest = None
     logs = []
     
-    if LaunchConfiguration("ouster_ip").perform(context) == '':
+    if LaunchConfiguration("sensor_hostname").perform(context) == '':
         print("User did not provide ip address (and udp destination) of the Ouster lidar. Running automatic discovery script.")
         # Try to discover the Ouster. If not successful, then run discovery again, but with logging enabled, so the user can see the error.
         discovery_data = run_ouster_discovery(script_path, quiet=True)
@@ -67,20 +67,12 @@ def execute_script_and_launch(context):
         else:
             return [LogInfo(msg="Automatic discovery of the Ouster lidar failed. You can try setting sensor ip and destination address manually.")]
     else:
-        sensor_hostname = LaunchConfiguration("ouster_ip").perform(context)
+        sensor_hostname = LaunchConfiguration("sensor_hostname").perform(context)
         if LaunchConfiguration("udp_dest").perform(context) == '':
             return [LogInfo(msg="'udp_dest' param is not set. Ouster lidar does not know where it should send the data.")]
         else:
             udp_dest = LaunchConfiguration("udp_dest").perform(context)
         
-    ouster_ros_pkg_dir = get_package_share_directory('ouster_ros')
-    default_params_file = Path(ouster_ros_pkg_dir) / 'config' / 'os_sensor_cloud_image_params.yaml'
-    params_file = LaunchConfiguration('params_file')
-    params_file_arg = DeclareLaunchArgument('params_file',
-                                            default_value=str(
-                                                default_params_file),
-                                            description='name or path to the parameters file to use.')
-
     combined_ns = LaunchConfiguration('uav_name').perform(context) + '/' + LaunchConfiguration('ouster_ns').perform(context)
 
     rviz_enable = LaunchConfiguration('viz')
@@ -116,14 +108,13 @@ def execute_script_and_launch(context):
         name='os_sensor',
         namespace=combined_ns,
         parameters=[
-            params_file,
+            _custom_config_file,
             {'auto_start': auto_start},
             {
              'sensor_hostname': sensor_hostname,
              'udp_dest': udp_dest,
              #'mtp_dest': mtp_dest
-            },
-            _custom_config_file
+            }
         ],
         remappings=remappings
     )
@@ -133,7 +124,7 @@ def execute_script_and_launch(context):
         plugin='ouster_ros::OusterCloud',
         name='os_cloud',
         namespace=combined_ns,
-        parameters=[params_file, _custom_config_file],
+        parameters=[_custom_config_file],
         remappings=remappings
     )
 
@@ -142,7 +133,7 @@ def execute_script_and_launch(context):
         plugin='ouster_ros::OusterImage',
         name='os_image',
         namespace=combined_ns,
-        parameters=[params_file, _custom_config_file],
+        parameters=[_custom_config_file],
         remappings=remappings
     )
 
@@ -160,14 +151,13 @@ def execute_script_and_launch(context):
     )
 
     rviz_launch_file_path = \
-        Path(ouster_ros_pkg_dir) / 'launch' / 'rviz.launch.py'
+        Path(get_package_share_directory('ouster_ros')) / 'launch' / 'rviz.launch.py'
     rviz_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([str(rviz_launch_file_path)]),
         condition=IfCondition(rviz_enable)
     )
 
     return logs + [
-        params_file_arg,
         rviz_enable_arg,
         auto_start_arg,
         rviz_launch,
@@ -185,8 +175,8 @@ def generate_launch_description():
     return launch.LaunchDescription([
         DeclareLaunchArgument('uav_name', default_value=EnvironmentVariable('UAV_NAME'), description='Camera namespace (used for node name and topic namespace)'),
         DeclareLaunchArgument('ouster_ns', default_value='ouster'),
-        DeclareLaunchArgument('custom_config', default_value='', description='Camera namespace (used for node name and topic namespace)'),
-        DeclareLaunchArgument('ouster_ip', default_value='', description="IP address of the Ouster lidar"),
+        DeclareLaunchArgument('custom_config', default_value=str(Path(get_package_share_directory('ouster_ros')) / 'config' / 'os_sensor_cloud_image_params.yaml'), description='Camera namespace (used for node name and topic namespace)'),
+        DeclareLaunchArgument('sensor_hostname', default_value='', description="IP address of the Ouster lidar"),
         DeclareLaunchArgument('udp_dest', default_value='', description='IP address of the machine, to which the data should be sent.'),
         OpaqueFunction(function=execute_script_and_launch)
     ])

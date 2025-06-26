@@ -35,7 +35,7 @@
     scan_ring: 0  # Use this parameter in conjunction with the SCAN flag and choose a
                   # value the range [0, sensor_beams_count)
     point_type: original # choose from: {original, native, xyz, xyzi, o_xyzi, xyzir}
-    remappings:
-      '/uav1/ouster/points': /body
+    #remappings:
+    #  '/uav1/ouster/points': /body
 /uav1/ouster/os_image:
     use_system_default_qos: false # needs to match the value defined for os_sensor node
