@@ -39,6 +39,10 @@
   <exec_depend>spdlog</exec_depend>
   <exec_depend>libtins-dev</exec_depend>
 
+  <!-- needed for automatic discovery -->
+  <exec_depend>net-tools</exec_depend>
+  <exec_depend>nmap</exec_depend>
+
   <test_depend>gtest</test_depend>
 
   <member_of_group>rosidl_interface_packages</member_of_group>
