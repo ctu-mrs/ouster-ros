@@ -101,6 +101,9 @@ def execute_script_and_launch(context):
     logs.append(LogInfo(msg=f"remappings:"))
     for remapping in remappings:
         logs.append(LogInfo(msg=f"\t{remapping[0]} -> {remapping[1]}"))
+    
+    default_config = LaunchConfiguration('default_config')
+    default_config_arg = DeclareLaunchArgument('default_config', default_value=str(Path(get_package_share_directory('ouster_ros')) / 'config' / 'os_sensor_cloud_image_params.yaml'), description='')
                 
     os_sensor = ComposableNode(
         package='ouster_ros',
@@ -108,6 +111,7 @@ def execute_script_and_launch(context):
         name='os_sensor',
         namespace=combined_ns,
         parameters=[
+            default_config,
             _custom_config_file,
             {'auto_start': auto_start},
             {
@@ -124,7 +128,7 @@ def execute_script_and_launch(context):
         plugin='ouster_ros::OusterCloud',
         name='os_cloud',
         namespace=combined_ns,
-        parameters=[_custom_config_file],
+        parameters=[default_config, _custom_config_file],
         remappings=remappings
     )
     
@@ -136,7 +140,7 @@ def execute_script_and_launch(context):
         plugin='ouster_ros::OusterImage',
         name='os_image',
         namespace=combined_ns,
-        parameters=[_custom_config_file],
+        parameters=[default_config, _custom_config_file],
         remappings=remappings,
         condition=IfCondition(enable_image)
     )
@@ -162,6 +166,7 @@ def execute_script_and_launch(context):
     )
 
     return logs + [
+        default_config_arg,
         enable_image_arg,
         rviz_enable_arg,
         auto_start_arg,
