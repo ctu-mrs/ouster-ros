@@ -127,6 +127,9 @@ def execute_script_and_launch(context):
         parameters=[_custom_config_file],
         remappings=remappings
     )
+    
+    enable_image = LaunchConfiguration('enable_image')
+    enable_image_arg = DeclareLaunchArgument('enable_image', default_value='False')
 
     os_image = ComposableNode(
         package='ouster_ros',
@@ -134,7 +137,8 @@ def execute_script_and_launch(context):
         name='os_image',
         namespace=combined_ns,
         parameters=[_custom_config_file],
-        remappings=remappings
+        remappings=remappings,
+        condition=IfCondition(enable_image)
     )
 
     os_container = ComposableNodeContainer(
@@ -158,6 +162,7 @@ def execute_script_and_launch(context):
     )
 
     return logs + [
+        enable_image_arg,
         rviz_enable_arg,
         auto_start_arg,
         rviz_launch,
