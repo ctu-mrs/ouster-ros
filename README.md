@@ -154,7 +154,39 @@ source ros2_ws/install/setup.bash
 
 ## Usage
 
-### Launching Nodes
+### Preferred launch method
+#### Main launch file
+Preferred launchfile is `sensor.composite.launch.py`. You can Launch it by:
+
+    $ ros2 launch ouster_ros sensor.composite.launch.py
+
+This launch file should automatically determine the IP address of the sensor (also referred to as `sensor_hostname`) and the `usd_dest` IP address that is important for the sensor to know where it should send the data. You can also override this automatic discovery and provide this two parameters to the launchfile manually:
+
+    $ ros2 launch ouster_ros sensor.composite.launch.py sensor_hostname:=169.254.58.43 udp_dest:=169.254.168.37
+
+There are also other launch files that can be used, but we recommed launching `sensor.composite.launch.py` because it is the most effective way (it running composable nodes instead of standalone) and it has the highest freedom of configuration.
+
+Automatic discovery assumes that the sensor is connected to the `link-local` network. This network IP address is of the form `169.254.X.X`. This assumption is used to discover sensor IP quickly and, at the same time, automatically determine the IP address that should be used as `udp_dest`.
+
+*Note: this automatic discovery was really not used on the real UAV yet, so there is some possibility, that it won't work.*
+
+It should be also possible to use sensor's serial number instead of it's IP address:
+
+    $ ros2 launch ouster_ros driver.launch.py sensor_hostname:=os-992040000161 udp_dest:=169.254.168.37
+
+but this didn't work for me. *(TODO: Test outside of the Docker container. It is possible that this is due to the fact that discovery works through mDNS protocol which requires the deamon to be running. That is not available inside of the Docker container.)*
+
+#### UAV_NAME environment variable
+You also must set environment variable `UAV_NAME` which value will be appended as prefix for all topics and node names. If you do not set this evironment variable, launch file will complain and will stop immediately. Typically, it would be set to something like `uav1`. This is useful for swarming, where you want to distinguish between topics from the different UAVs.
+
+#### Custom config
+User can supply their own custom config file. Launch file `sensor.composite.launch.py` has the parameter `custom_config` that shoudl be pointed to the path where custom config resides. Example:
+
+    $ ros2 launch ouster_ros sensor.composite.launch.py custom_config:=/home/<username>/my_config.yaml
+
+You don't have to specify all parameters here, just the ones you want to override.
+
+### Launching other nodes
 The package supports three modes of interaction, you can connect to a _live sensor_, _replay_ a recorded
 bag or _record_ a new bag file using the corresponding launch files. Recently, we have added a new mode
 that supports multicast. The commands are listed below, for convenience we do provide both launch file
