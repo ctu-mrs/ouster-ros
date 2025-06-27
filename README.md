@@ -153,7 +153,6 @@ source ros2_ws/install/setup.bash
 ```
 
 ## Usage
-
 ### Preferred launch method
 #### Main launch file
 Preferred launchfile is `sensor.composite.launch.py`. You can Launch it by:
@@ -164,20 +163,7 @@ This launch file should automatically determine the IP address of the sensor (al
 
     $ ros2 launch ouster_ros sensor.composite.launch.py sensor_hostname:=169.254.58.43 udp_dest:=169.254.168.37
 
-There are also other launch files that can be used, but we recommed launching `sensor.composite.launch.py` because it is the most effective way (it running composable nodes instead of standalone) and it has the highest freedom of configuration.
-
-Automatic discovery assumes that the sensor is connected to the `link-local` network. This network IP address is of the form `169.254.X.X`. This assumption is used to discover sensor IP quickly and, at the same time, automatically determine the IP address that should be used as `udp_dest`.
-
-*Note: this automatic discovery was really not used on the real UAV yet, so there is some possibility, that it won't work.*
-
-It should be also possible to use sensor's serial number instead of it's IP address:
-
-    $ ros2 launch ouster_ros driver.launch.py sensor_hostname:=os-992040000161 udp_dest:=169.254.168.37
-
-but this didn't work for me. *(TODO: Test outside of the Docker container. It is possible that this is due to the fact that discovery works through mDNS protocol which requires the deamon to be running. That is not available inside of the Docker container.)*
-
-#### UAV_NAME environment variable
-You also must set environment variable `UAV_NAME` which value will be appended as prefix for all topics and node names. If you do not set this evironment variable, launch file will complain and will stop immediately. Typically, it would be set to something like `uav1`. This is useful for swarming, where you want to distinguish between topics from the different UAVs.
+There are also other launch files that can be used, but we recommed launching `sensor.composite.launch.py` because it is the most effective way (it running composable nodes instead of standalone) and it has the most flexible in terms of configuration.
 
 #### Custom config
 User can supply their own custom config file. Launch file `sensor.composite.launch.py` has the parameter `custom_config` that shoudl be pointed to the path where custom config resides. Example:
@@ -185,6 +171,22 @@ User can supply their own custom config file. Launch file `sensor.composite.laun
     $ ros2 launch ouster_ros sensor.composite.launch.py custom_config:=/home/<username>/my_config.yaml
 
 You don't have to specify all parameters here, just the ones you want to override.
+
+In case you need to create your custom config, use `os_sensor_cloud_image_params.yaml` as a reference/template. This config file is the default config loaded by the `sensor.composite.launch.py`.
+
+#### Automatic discovery
+Launchfile `sensor.composite.launch.py` is using automatic discovery to obtain sensor's IP address and get the IP address of the PC running the lidar driver to set `udp_dest` parameter. Automatic discovery assumes that the sensor is connected to the ethernet using the `link-local` network mode. This network's type IP address is of the form `169.254.X.X`. This assumption is used to discover sensor IP quickly and, at the same time, automatically determine the IP address that should be used as `udp_dest`.
+
+*Note: this automatic discovery was really not used on the real UAV yet, so there is some possibility, that it won't work.*
+
+It should be also possible to use sensor's serial number instead of it's IP address:
+
+    $ ros2 launch ouster_ros driver.launch.py sensor_hostname:=os-992040000161 udp_dest:=169.254.168.37
+
+but this didn't work for me. *(Note: I tested this both in the the Docker container and outside, but it did not work and I am not sure if it really should. That's sad, because it woud be very convenient.)*
+
+#### UAV_NAME environment variable
+You must set environment variable `UAV_NAME` which value will be prepended as prefix for all topics and node names. If you do not set this evironment variable, launch file will complain and will stop immediately without launching anything. Typically, it would be set to something like `uav1`. This is useful for swarming, where you want to distinguish between topics from the different UAVs.
 
 ### Launching other nodes
 The package supports three modes of interaction, you can connect to a _live sensor_, _replay_ a recorded
