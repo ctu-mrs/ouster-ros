@@ -13,65 +13,16 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, EnvironmentVariable
 
-import os
-import subprocess
 import yaml
 
-def run_ouster_discovery(script_path, quiet=False):
-    try:
-        # Run the script and capture output
-        result = subprocess.run(
-            ["python3", script_path, '-q' if quiet else ''],
-            capture_output=True,
-            text=True, 
-            check=True
-        )
-
-        # Get the output (success case)
-        output = result.stdout
-        output = output.split(' ')
-
-        return output
-
-    except subprocess.CalledProcessError as e:
-        if not quiet:
-            # When check=True, the exception contains the result info
-            print(f"Script failed with return code {e.returncode}")
-            #print(f"Error output: {e.stderr}")
-            #print(f"Standard output: {e.stdout}")  # You can also access stdout from the exception
-            print(f"Discovery script output:\n{e.stdout}")
-        return []
-
 def execute_script_and_launch(context):
-    package_dir = get_package_share_directory('ouster_ros')
-    script_path = os.path.join(package_dir, 'scripts', 'ouster_ip_route.py')
-
-    sensor_hostname = None
-    udp_dest = None
     logs = []
-
-    if LaunchConfiguration("sensor_hostname").perform(context) == '':
-        print("User did not provide ip address (and udp destination) of the Ouster lidar. Running automatic discovery script.")
-        # Try to discover the Ouster. If not successful, then run discovery again, but with logging enabled, so the user can see the error.
-        discovery_data = run_ouster_discovery(script_path, quiet=True)
-        if len(discovery_data) == 0:
-            run_ouster_discovery(script_path, quiet=False)
-
-        if len(discovery_data) == 3:
-            sensor_hostname = discovery_data[1]
-            udp_dest = discovery_data[2]
-
-            logs.append(LogInfo(msg=f"Ouster ip: {sensor_hostname}"))
-            logs.append(LogInfo(msg=f"Udp destination ip: {udp_dest.strip()}"))
-            logs.append(LogInfo(msg=f"Ouster serial number: {discovery_data[0]}"))
-        else:
-            return [LogInfo(msg="Automatic discovery of the Ouster lidar failed. You can try setting sensor ip and destination address manually.")]
+    
+    sensor_hostname = LaunchConfiguration("sensor_hostname").perform(context)
+    if LaunchConfiguration("udp_dest").perform(context) == '':
+        return [LogInfo(msg="'udp_dest' param is not set. Ouster lidar does not know where it should send the data.")]
     else:
-        sensor_hostname = LaunchConfiguration("sensor_hostname").perform(context)
-        if LaunchConfiguration("udp_dest").perform(context) == '':
-            return [LogInfo(msg="'udp_dest' param is not set. Ouster lidar does not know where it should send the data.")]
-        else:
-            udp_dest = LaunchConfiguration("udp_dest").perform(context)
+        udp_dest = LaunchConfiguration("udp_dest").perform(context)
 
     combined_ns = LaunchConfiguration('uav_name').perform(context) + '/' + LaunchConfiguration('ouster_ns').perform(context)
 
@@ -128,7 +79,8 @@ def execute_script_and_launch(context):
         plugin='ouster_ros::OusterCloud',
         name='os_cloud',
         namespace=combined_ns,
-        parameters=[default_config, _custom_config_file],
+        parameters=[default_config, _custom_config_file, {'frame_id_prefix': EnvironmentVariable('UAV_NAME')}],
+        #parameters=[default_config, _custom_config_file, {'use_namespace_as_frame_id_prefix': True}],
         remappings=remappings
     )
 
