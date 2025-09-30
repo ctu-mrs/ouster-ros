@@ -258,7 +258,6 @@ install(
   DIRECTORY
     launch
     config
-    scripts
   DESTINATION
     share/${PROJECT_NAME}
 )
