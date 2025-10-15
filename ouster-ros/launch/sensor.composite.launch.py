@@ -80,7 +80,6 @@ def execute_script_and_launch(context):
         name='os_cloud',
         namespace=combined_ns,
         parameters=[default_config, _custom_config_file, {'frame_id_prefix': EnvironmentVariable('UAV_NAME')}],
-        #parameters=[default_config, _custom_config_file, {'use_namespace_as_frame_id_prefix': True}],
         remappings=remappings
     )
 
