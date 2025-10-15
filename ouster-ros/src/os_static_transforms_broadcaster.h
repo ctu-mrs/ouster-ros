@@ -54,20 +54,20 @@ class OusterStaticTransformsBroadcaster {
         bool use_namespace_as_frame_id_prefix = node->get_parameter("use_namespace_as_frame_id_prefix").as_bool();
 
         if(!frame_id_prefix.empty()){
-            RCLCPP_INFO(node->get_logger(), "frame id prefix taken from 'frame_id_prefix' param: %s", ("/" + frame_id_prefix).c_str());
-            sensor_frame = "/" + frame_id_prefix + "/" + sensor_frame;
-            lidar_frame = "/" + frame_id_prefix + "/" + lidar_frame;
-            imu_frame = "/" + frame_id_prefix + "/" + imu_frame;
-            point_cloud_frame = "/" + frame_id_prefix + "/" + point_cloud_frame;
+            RCLCPP_INFO(node->get_logger(), "frame id prefix taken from 'frame_id_prefix' param: %s", (frame_id_prefix).c_str());
+            sensor_frame = frame_id_prefix + "/" + sensor_frame;
+            lidar_frame = frame_id_prefix + "/" + lidar_frame;
+            imu_frame = frame_id_prefix + "/" + imu_frame;
+            point_cloud_frame = frame_id_prefix + "/" + point_cloud_frame;
         }
-        else if(use_namespace_as_frame_id_prefix){
-            RCLCPP_INFO(node->get_logger(), "frame id prefix taken from node namespace: %s", node->get_namespace());
-            sensor_frame = std::string(node->get_namespace()) + "/" + sensor_frame;
-            lidar_frame = std::string(node->get_namespace()) + "/" + lidar_frame;
-            imu_frame = std::string(node->get_namespace()) + "/" + imu_frame;
-            point_cloud_frame = std::string(node->get_namespace()) + "/" + point_cloud_frame;
-        }
-        else RCLCPP_WARN(node->get_logger(), "'frame_id_prefix' param is empty and 'use_namespace_as_frame_id_prefix' is false. Frame ids will be without prefix");
+        // else if(use_namespace_as_frame_id_prefix){
+        //     RCLCPP_INFO(node->get_logger(), "frame id prefix taken from node namespace: %s", node->get_namespace());
+        //     sensor_frame = std::string(node->get_namespace()) + "/" + sensor_frame;
+        //     lidar_frame = std::string(node->get_namespace()) + "/" + lidar_frame;
+        //     imu_frame = std::string(node->get_namespace()) + "/" + imu_frame;
+        //     point_cloud_frame = std::string(node->get_namespace()) + "/" + point_cloud_frame;
+        // }
+        // else RCLCPP_WARN(node->get_logger(), "'frame_id_prefix' param is empty and 'use_namespace_as_frame_id_prefix' is false. Frame ids will be without prefix");
     }
 
     void broadcast_transforms(const sensor::sensor_info& info) {
