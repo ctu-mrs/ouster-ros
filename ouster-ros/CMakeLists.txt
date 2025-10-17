@@ -21,6 +21,8 @@ find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 find_package(pcl_conversions REQUIRED)
 find_package(tf2_eigen REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # ==== Options ====
@@ -188,6 +190,16 @@ rclcpp_components_register_node(os_pcap_component
 )
 endif()
 
+# ==== transform_fixer executable ====
+add_executable(transform_fixer src/transform_fixer.cpp)
+
+ament_target_dependencies(transform_fixer
+  rclcpp
+  tf2_ros
+  geometry_msgs
+  tf2
+)
+
 # ==== Test ====
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -231,6 +243,11 @@ install(
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+)
+
+# Install transform_fixer separately to the correct location
+install(TARGETS transform_fixer
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 install(

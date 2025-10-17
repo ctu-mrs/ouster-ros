@@ -11,6 +11,8 @@
 
   <arg name="ouster_ns" default="ouster"
     description="Override the default namespace of all ouster nodes"/>
+  <arg name="uav_name" default="uav1"
+    description="Override the default namespace of all ouster nodes"/>
   <!-- TODO: revisit the proper behaviour of allowing users override the default timestamp_mode during replay -->
   <arg name="timestamp_mode" default=""
     description="method used to timestamp measurements; possible values: {
@@ -92,8 +94,14 @@
       <param name="metadata" value="$(var metadata)"/>
       <param name="use_system_default_qos" value="$(var use_system_default_qos)"/>
     </node>
+    <node pkg="ouster_ros" exec="transform_fixer" name="transform_fixer">
+      <param name="fcu_frame" value="$(var uav_name)/fcu"/>
+      <param name="old_os_sensor_frame" value="os_sensor"/>
+      <param name="new_os_sensor_frame" value="$(var uav_name)/os_sensor"/>
+    </node>
     <node_container pkg="rclcpp_components" exec="component_container_mt" name="os_container" output="screen" namespace="">
       <composable_node pkg="ouster_ros" plugin="ouster_ros::OusterCloud" name="os_cloud">
+        <param name="frame_id_prefix" value="$(var uav_name)"/>
         <param name="sensor_frame" value="$(var sensor_frame)"/>
         <param name="lidar_frame" value="$(var lidar_frame)"/>
         <param name="imu_frame" value="$(var imu_frame)"/>
