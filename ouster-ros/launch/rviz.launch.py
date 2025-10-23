@@ -29,8 +29,7 @@ def generate_launch_description():
         namespace=ouster_ns,
         executable='rviz2',
         name='rviz2',
-        arguments=['-d', rviz_config],
-        parameters=[{'use_sim_time': True}]
+        arguments=['-d', rviz_config]
     )
 
     return LaunchDescription([
