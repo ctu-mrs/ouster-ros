@@ -228,15 +228,34 @@ ros2 launch ouster_ros record.launch.xml    \
 ```
 
 #### Replay Mode
-> Note
-> As of package version 8.1, specifiying metadata file is optional if the bag file being replayed
-> already contains the metadata topic
+
+Here are instructions on how to play a bag file in the `.mcap` format. 
+
+You can launch only the nodes, with the bag file being played from a separate terminal:
 
 ```bash
-ros2 launch ouster_ros replay.launch.xml    \
-    bag_file:=<path to rosbag file>         \
-    metadata:=<json file name>              # optional if bag file has /metadata topic
+ros2 launch ouster_ros replay.launch.py uav_name:=uav123
 ```
+
+> Note
+> When playing bag file from separate terminal, don't forget to add `--clock <frequency>` option to the `ros2 bag play` command, otherwise the
+> RViz will crash.
+
+Or you can also specify the path to the bag file and the launchfile will play it automatically:
+
+```bash
+ros2 launch ouster_ros replay.launch.py uav_name:=uav123 bag_file:=/home/user/.../rosbag2_2025_10_09-18_25_33_0.mcap
+```
+
+If your bag file does not have metadata included, you can give the launchfile separate metadata file:
+
+```bash
+ros2 launch ouster_ros replay.launch.py uav_name:=uav123 metadata:=<json file name>
+```
+
+> Note
+> As of package version 8.1, specifying metadata file is optional if the bag file being replayed
+> already contains the metadata topic
 
 ##### PCAP Replay Mode
 > Note
