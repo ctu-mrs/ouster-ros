@@ -14,7 +14,7 @@
   <arg name="ouster_ns" default="/$(var uav_name)/ouster"
     description="Override the default namespace of all ouster nodes"/>
   <!-- TODO: revisit the proper behaviour of allowing users override the default timestamp_mode during replay -->
-  <arg name="timestamp_mode" default=""
+  <arg name="timestamp_mode" default="TIME_FROM_ROS_TIME"
     description="method used to timestamp measurements; possible values: {
     TIME_FROM_INTERNAL_OSC,
     TIME_FROM_SYNC_PULSE_IN,
@@ -25,7 +25,7 @@
     description="UTC/TAI offset in seconds to apply when using TIME_FROM_PTP_1588"/>
   <arg name="metadata" default=""
     description="path to write metadata file when receiving sensor data"/>
-  <arg name="bag_file"
+  <arg name="bag_file" default=""
     description="file name to use for the recorded bag file"/>
   <arg name="viz" default="true"
     description="whether to run a rviz"/>
