@@ -25,7 +25,7 @@
     imu_port: 0
     use_system_default_qos: false
     azimuth_window_start: 0
-    azimuth_window_end: 180000
+    azimuth_window_end: 360000
     persist_config: false
     attempt_reconnect: false
     dormant_period_between_reconnects: 1.0
