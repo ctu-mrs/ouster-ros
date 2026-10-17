@@ -345,7 +345,6 @@ class OusterSensor : public OusterClientBase {
     }
 
     void connection_loop(sensor::client& cli, const sensor::sensor_info& info) {
-        const auto packet_receive_time = ros::Time::now();
         auto pf = sensor::get_format(info);
 
         auto state = sensor::poll_client(cli);
@@ -360,14 +359,14 @@ class OusterSensor : public OusterClientBase {
         if (state & sensor::LIDAR_DATA) {
             if (sensor::read_lidar_packet(cli, lidar_packet.buf.data(), pf))
             {
-                lidar_packet.rcv_stamp = packet_receive_time;
+                lidar_packet.rcv_stamp = ros::Time::now();
                 lidar_packet_pub.publish(lidar_packet);
             }
         }
         if (state & sensor::IMU_DATA) {
             if (sensor::read_imu_packet(cli, imu_packet.buf.data(), pf))
             {
-                imu_packet.rcv_stamp = packet_receive_time;
+                imu_packet.rcv_stamp = ros::Time::now();
                 imu_packet_pub.publish(imu_packet);
             }
         }

@@ -65,9 +65,9 @@ class OusterCloud : public nodelet::Nodelet {
         {
           if (use_ros_time)
           {
-            NODELET_ERROR_STREAM("[OusterCloud]: Cannot enable deskewing without PTP time synchronization! Either unset fixed_frame or set timestamp_mode to TIME_FROM_PTP_1588 and configure PTP time sync.");
-            ros::shutdown();
-            return;
+            const auto error_msg = "[OusterCloud]: Cannot enable deskewing without PTP time synchronization! Either unset fixed_frame or set timestamp_mode to TIME_FROM_PTP_1588 and configure PTP time sync.";
+            NODELET_ERROR_STREAM(error_msg);
+            throw std::runtime_error(error_msg);
           }
 
           NODELET_INFO_STREAM("[OusterCloud]: Enabling deskewed using \"" << fixed_frame << "\" as the fixed frame.");
@@ -140,16 +140,23 @@ class OusterCloud : public nodelet::Nodelet {
     void convert_scan_to_pointcloud_publish(const std::optional<ros::Time> cloud_stamp_override = std::nullopt) {
         for (int i = 0; i < n_returns; ++i) {
 
+            bool cloud_ok = false;
             ros::Time cloud_stamp;
             if (deskew)
-              scan_to_cloud_deskewed(xyz_lut, ls, cloud, cloud_stamp, i,
+              cloud_ok = scan_to_cloud_deskewed(xyz_lut, ls, cloud, cloud_stamp, i,
                    tf_buffer,
                    sensor_frame,
                    sensor_frame,
                    fixed_frame,
                    lookup_timeout);
             else
-              scan_to_cloud(xyz_lut, ls, cloud, cloud_stamp, i);
+              cloud_ok = scan_to_cloud(xyz_lut, ls, cloud, cloud_stamp, i);
+
+            if (!cloud_ok)
+            {
+              ROS_ERROR_STREAM_THROTTLE(1.0, "[OusterCloud]: Failed to convert scan packets to cloud, not publishing.");
+              return;
+            }
 
             if (cloud_stamp_override.has_value())
               cloud_stamp = cloud_stamp_override.value();

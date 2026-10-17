@@ -88,7 +88,7 @@ sensor_msgs::Imu packet_to_imu_msg(const PacketMsg& pm,
  * @param[out] cloud_stamp_out output timestamp of the cloud message to populate
  * @param[in] return_index index of return desired starting at 0
  */
-void scan_to_cloud(const ouster::XYZLut& xyz_lut,
+bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
                    const ouster::LidarScan& ls,
                    ouster_ros::Cloud& cloud_out,
                    ros::Time& cloud_stamp_out,
@@ -106,7 +106,7 @@ void scan_to_cloud(const ouster::XYZLut& xyz_lut,
  * @param[in] target_frame name of the target frame to transform the data to
  * @param[in] fixed_frame name of a world-fixed frame to be used as the middle frame for the TF
  */
-void scan_to_cloud_deskewed(
+bool scan_to_cloud_deskewed(
                    const ouster::XYZLut& xyz_lut,
                    const ouster::LidarScan& ls,
                    ouster_ros::Cloud& cloud_out,

@@ -118,7 +118,7 @@ inline ouster::img_t<T> get_or_fill_zero(sensor::ChanField f,
     return result;
 }
 
-void scan_to_cloud(const ouster::XYZLut& xyz_lut,
+bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
                    const ouster::LidarScan& ls,
                    ouster_ros::Cloud& cloud,
                    ros::Time& cloud_stamp_out,
@@ -143,21 +143,7 @@ void scan_to_cloud(const ouster::XYZLut& xyz_lut,
     const auto* first_stamp_ptr = std::find_if(ts_raw.data(), ts_raw.data() + ts_raw.size(),
                             [](uint64_t h) { return h != 0; });
     if (first_stamp_ptr == ts_raw.data() + ts_raw.size())
-    {
-      for (auto u = 0; u < ls.h; u++)
-          for (auto v = 0; v < ls.w; v++)
-            cloud(v, u) = 
-            {
-                {{0.0f, 0.0f, 0.0f, 1.0f}},
-                0.0f,
-                0u,
-                0u,
-                0u,
-                0u,
-                0u
-            }; // a "correct" zero point
-      return;
-    }
+      return false;
     const auto first_stamp_internal = *first_stamp_ptr;
 
     for (auto u = 0; u < ls.h; u++) {
@@ -177,9 +163,10 @@ void scan_to_cloud(const ouster::XYZLut& xyz_lut,
     }
 
     cloud_stamp_out.fromNSec(first_stamp_internal);
+    return true;
 }
 
-void scan_to_cloud_deskewed(
+bool scan_to_cloud_deskewed(
                    const ouster::XYZLut& xyz_lut,
                    const ouster::LidarScan& ls,
                    ouster_ros::Cloud& cloud_out,
@@ -225,8 +212,7 @@ void scan_to_cloud_deskewed(
     if (!start_ts.has_value() || !end_ts.has_value())
     {
       ROS_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Cloud has no timestamps! Not deskewing.");
-      scan_to_cloud(xyz_lut, ls, cloud_out, cloud_stamp_out, return_index);
-      return;
+      return scan_to_cloud(xyz_lut, ls, cloud_out, cloud_stamp_out, return_index);
     }
 
     const auto first_stamp_internal = start_ts.value();
@@ -247,8 +233,7 @@ void scan_to_cloud_deskewed(
     catch (const tf2::TransformException& ex)
     {
       ROS_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Cannot deskew: " << ex.what());
-      scan_to_cloud(xyz_lut, ls, cloud_out, cloud_stamp_out, return_index);
-      return;
+      return scan_to_cloud(xyz_lut, ls, cloud_out, cloud_stamp_out, return_index);
     }
 
     int invalid_tfs = 0;
@@ -347,6 +332,8 @@ void scan_to_cloud_deskewed(
     {
         ROS_WARN_STREAM_THROTTLE(1.0, "Some packets were lost (" << dropped_cols << " columns are missing) - some points (" << dropped_cols*cloud_out.height << "/" << cloud_out.size() << ") are missing.");
     }
+
+    return true;
 }
 
 sensor_msgs::PointCloud2 cloud_to_cloud_msg(const Cloud& cloud,
