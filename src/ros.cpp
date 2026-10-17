@@ -212,7 +212,7 @@ bool scan_to_cloud_deskewed(
     if (!start_ts.has_value() || !end_ts.has_value())
     {
       ROS_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Cloud has no timestamps! Not deskewing.");
-      return scan_to_cloud(xyz_lut, ls, cloud_out, cloud_stamp_out, return_index);
+      return false;
     }
 
     const auto first_stamp_internal = start_ts.value();
@@ -233,7 +233,7 @@ bool scan_to_cloud_deskewed(
     catch (const tf2::TransformException& ex)
     {
       ROS_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Cannot deskew: " << ex.what());
-      return scan_to_cloud(xyz_lut, ls, cloud_out, cloud_stamp_out, return_index);
+      return false;
     }
 
     int invalid_tfs = 0;

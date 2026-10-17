@@ -105,6 +105,9 @@ bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
  * @param[in] sensor_frame name of the sensor's frame to be used as the source frame of the TF
  * @param[in] target_frame name of the target frame to transform the data to
  * @param[in] fixed_frame name of a world-fixed frame to be used as the middle frame for the TF
+ * @return true if the deskewed cloud was populated; false if deskewing was not possible (no valid column
+ * timestamps or the transformation is not available within lookup_timeout), in which case cloud_out is
+ * not populated - falling back to scan_to_cloud() is up to the caller
  */
 bool scan_to_cloud_deskewed(
                    const ouster::XYZLut& xyz_lut,

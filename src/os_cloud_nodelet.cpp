@@ -57,11 +57,11 @@ class OusterCloud : public nodelet::Nodelet {
         // fall back to ROS timestamping of messages if PTP time sync is not available
         use_ros_time = timestamp_mode_arg != "TIME_FROM_PTP_1588";
 
-        deskew = false;
-        fixed_frame = pnh.param("fixed_frame", std::string{});
-        const double default_lookup_timeout_s = 0.05;
-        lookup_timeout = ros::Duration(pnh.param("lookup_timeout_s", default_lookup_timeout_s));
-        if (!fixed_frame.empty())
+        deskewing.enabled = false;
+        deskewing.fixed_frame = pnh.param("deskew/fixed_frame", std::string{});
+        deskewing.publish_raw_fallback = pnh.param("deskew/publish_raw_fallback", false);
+        deskewing.lookup_timeout = ros::Duration(pnh.param("deskew/lookup_timeout_s", 0.05));
+        if (!deskewing.fixed_frame.empty())
         {
           if (use_ros_time)
           {
@@ -70,8 +70,8 @@ class OusterCloud : public nodelet::Nodelet {
             throw std::runtime_error(error_msg);
           }
 
-          NODELET_INFO_STREAM("[OusterCloud]: Enabling deskewed using \"" << fixed_frame << "\" as the fixed frame.");
-          deskew = true;
+          NODELET_INFO_STREAM("[OusterCloud]: Enabling deskewed using \"" << deskewing.fixed_frame << "\" as the fixed frame.");
+          deskewing.enabled = true;
         }
 
         auto& nh = getNodeHandle();
@@ -142,19 +142,27 @@ class OusterCloud : public nodelet::Nodelet {
 
             bool cloud_ok = false;
             ros::Time cloud_stamp;
-            if (deskew)
+            if (deskewing.enabled)
+            {
               cloud_ok = scan_to_cloud_deskewed(xyz_lut, ls, cloud, cloud_stamp, i,
                    tf_buffer,
                    sensor_frame,
                    sensor_frame,
-                   fixed_frame,
-                   lookup_timeout);
-            else
+                   deskewing.fixed_frame,
+                   deskewing.lookup_timeout);
+            }
+
+            // if deskewing is disabled, just publish the raw cloud
+            // if it is enabled and failed, only publish if publish_raw_fallback is true
+            if (!deskewing.enabled || (!cloud_ok && deskewing.publish_raw_fallback))
               cloud_ok = scan_to_cloud(xyz_lut, ls, cloud, cloud_stamp, i);
 
             if (!cloud_ok)
             {
-              ROS_ERROR_STREAM_THROTTLE(1.0, "[OusterCloud]: Failed to convert scan packets to cloud, not publishing.");
+              if (deskewing.enabled && !deskewing.publish_raw_fallback)
+                ROS_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Deskewing failed and publish_raw_fallback is false, not publishing.");
+              else
+                ROS_ERROR_STREAM_THROTTLE(1.0, "[OusterCloud]: Failed to convert scan packets to cloud, not publishing.");
               return;
             }
 
@@ -230,9 +238,13 @@ class OusterCloud : public nodelet::Nodelet {
     tf2_ros::Buffer tf_buffer;
     std::unique_ptr<tf2_ros::TransformListener> tf_listener_ptr;
 
-    bool deskew;
-    std::string fixed_frame;
-    ros::Duration lookup_timeout;
+    struct
+    {
+      bool enabled;
+      std::string fixed_frame;
+      ros::Duration lookup_timeout;
+      bool publish_raw_fallback;
+    } deskewing;
 
     std::string sensor_frame;
     std::string imu_frame;
