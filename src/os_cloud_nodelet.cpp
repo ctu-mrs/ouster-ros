@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <optional>
 
 #include "ouster_ros/GetMetadata.h"
 #include "ouster_ros/PacketMsg.h"
@@ -46,16 +47,6 @@ class OusterCloud : public nodelet::Nodelet {
         NODELET_INFO_STREAM("[OusterCloud]: Initializing.");
         tf_listener_ptr = std::make_unique<tf2_ros::TransformListener>(tf_buffer);
 
-        deskew = false;
-        fixed_frame = pnh.param("fixed_frame", std::string{});
-        const double default_lookup_timeout_s = 0.05;
-        lookup_timeout = ros::Duration(pnh.param("lookup_timeout_s", default_lookup_timeout_s));
-        if (!fixed_frame.empty())
-        {
-          NODELET_INFO_STREAM("[OusterCloud]: Enabling deskewed using \"" << fixed_frame << "\" as the fixed frame.");
-          deskew = true;
-        }
-
         auto tf_prefix = pnh.param("tf_prefix", std::string{});
         if (is_arg_set(tf_prefix) && tf_prefix.back() != '/')
             tf_prefix.append("/");
@@ -63,7 +54,25 @@ class OusterCloud : public nodelet::Nodelet {
         imu_frame = tf_prefix + "os_imu";
         lidar_frame = tf_prefix + "os_lidar";
         auto timestamp_mode_arg = pnh.param("timestamp_mode", std::string{});
-        use_ros_time = timestamp_mode_arg == "TIME_FROM_ROS_TIME";
+        // fall back to ROS timestamping of messages if PTP time sync is not available
+        use_ros_time = timestamp_mode_arg != "TIME_FROM_PTP_1588";
+
+        deskew = false;
+        fixed_frame = pnh.param("fixed_frame", std::string{});
+        const double default_lookup_timeout_s = 0.05;
+        lookup_timeout = ros::Duration(pnh.param("lookup_timeout_s", default_lookup_timeout_s));
+        if (!fixed_frame.empty())
+        {
+          if (use_ros_time)
+          {
+            NODELET_ERROR_STREAM("[OusterCloud]: Cannot enable deskewing without PTP time synchronization! Either unset fixed_frame or set timestamp_mode to TIME_FROM_PTP_1588 and configure PTP time sync.");
+            ros::shutdown();
+            return;
+          }
+
+          NODELET_INFO_STREAM("[OusterCloud]: Enabling deskewed using \"" << fixed_frame << "\" as the fixed frame.");
+          deskew = true;
+        }
 
         auto& nh = getNodeHandle();
         ouster_ros::GetMetadata metadata{};
@@ -128,23 +137,24 @@ class OusterCloud : public nodelet::Nodelet {
             info.lidar_to_sensor_transform, sensor_frame, lidar_frame));
     }
 
-    void convert_scan_to_pointcloud_publish(std::chrono::nanoseconds scan_ts,
-                                            const ros::Time& msg_ts) {
+    void convert_scan_to_pointcloud_publish(const std::optional<ros::Time> cloud_stamp_override = std::nullopt) {
         for (int i = 0; i < n_returns; ++i) {
 
+            ros::Time cloud_stamp;
             if (deskew)
-              scan_to_cloud_deskewed(xyz_lut, msg_ts, ls, cloud, i,
+              scan_to_cloud_deskewed(xyz_lut, ls, cloud, cloud_stamp, i,
                    tf_buffer,
                    sensor_frame,
                    sensor_frame,
-                   fixed_frame);
+                   fixed_frame,
+                   lookup_timeout);
             else
-              scan_to_cloud(xyz_lut, msg_ts, ls, cloud, i);
+              scan_to_cloud(xyz_lut, ls, cloud, cloud_stamp, i);
 
-            sensor_msgs::PointCloud2 pc =
-                ouster_ros::cloud_to_cloud_msg(cloud, msg_ts, sensor_frame);
-            sensor_msgs::PointCloud2Ptr pc_ptr =
-                boost::make_shared<sensor_msgs::PointCloud2>(pc);
+            if (cloud_stamp_override.has_value())
+              cloud_stamp = cloud_stamp_override.value();
+            sensor_msgs::PointCloud2 pc = ouster_ros::cloud_to_cloud_msg(cloud, cloud_stamp, sensor_frame);
+            sensor_msgs::PointCloud2Ptr pc_ptr = boost::make_shared<sensor_msgs::PointCloud2>(pc);
             lidar_pubs[i].publish(pc_ptr);
 
             std_msgs::Bool alive_msg;
@@ -157,25 +167,20 @@ class OusterCloud : public nodelet::Nodelet {
 
     void lidar_handler_sensor_time(const PacketMsg::ConstPtr& packet) {
         if (!(*scan_batcher)(packet->buf.data(), ls)) return;
-        auto ts_v = ls.timestamp();
-        auto idx = std::find_if(ts_v.data(), ts_v.data() + ts_v.size(),
-                                [](uint64_t h) { return h != 0; });
-        if (idx == ts_v.data() + ts_v.size()) return;
-        auto scan_ts = std::chrono::nanoseconds{ts_v(idx - ts_v.data())};
-        convert_scan_to_pointcloud_publish(scan_ts, to_ros_time(scan_ts));
+        convert_scan_to_pointcloud_publish();
     }
 
     void lidar_handler_ros_time(const PacketMsg::ConstPtr& packet) {
-        auto packet_receive_time = ros::Time::now();
-        static auto frame_ts = packet_receive_time;  // first point cloud time
+        const auto packet_receive_time = packet->rcv_stamp;
+        // this seemingly staggered handling of the timestamp is due to how ScanBatcher
+        // signals a new cloud is ready (when the first packet of the next scan arrives)
+        // so it is correct
+        if (last_frame_ts == ros::Time(0))
+          last_frame_ts = packet_receive_time;  // set time for next point cloud msg
+
         if (!(*scan_batcher)(packet->buf.data(), ls)) return;
-        auto ts_v = ls.timestamp();
-        auto idx = std::find_if(ts_v.data(), ts_v.data() + ts_v.size(),
-                                [](uint64_t h) { return h != 0; });
-        if (idx == ts_v.data() + ts_v.size()) return;
-        auto scan_ts = std::chrono::nanoseconds{ts_v(idx - ts_v.data())};
-        convert_scan_to_pointcloud_publish(scan_ts, frame_ts);
-        frame_ts = packet_receive_time;  // set time for next point cloud msg
+        convert_scan_to_pointcloud_publish(last_frame_ts);
+        last_frame_ts = packet_receive_time;  // set time for next point cloud msg
     }
 
     void imu_handler(const PacketMsg::ConstPtr& packet) {
@@ -229,6 +234,7 @@ class OusterCloud : public nodelet::Nodelet {
     tf2_ros::StaticTransformBroadcaster tf_bcast;
 
     bool use_ros_time;
+    ros::Time last_frame_ts;
 };
 }  // namespace nodelets_os
 

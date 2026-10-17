@@ -83,20 +83,35 @@ sensor_msgs::Imu packet_to_imu_msg(const PacketMsg& pm,
 /**
  * Populate a PCL point cloud from a LidarScan
  * @param[in] xyz_lut lookup table from sensor beam angles (see lidar_scan.h)
- * @param[in] scan_ts scan start used to caluclate relative timestamps for
- * points
  * @param[in] ls input lidar data
  * @param[out] cloud output pcl pointcloud to populate
+ * @param[out] cloud_stamp_out output timestamp of the cloud message to populate
  * @param[in] return_index index of return desired starting at 0
  */
 void scan_to_cloud(const ouster::XYZLut& xyz_lut,
-                   const ros::Time& scan_ts, const ouster::LidarScan& ls,
-                   ouster_ros::Cloud& cloud_out, int return_index = 0);
+                   const ouster::LidarScan& ls,
+                   ouster_ros::Cloud& cloud_out,
+                   ros::Time& cloud_stamp_out,
+                   int return_index = 0);
 
+/**
+ * Populate a PCL point cloud from a LidarScan
+ * @param[in] xyz_lut lookup table from sensor beam angles (see lidar_scan.h)
+ * @param[in] ls input lidar data
+ * @param[out] cloud output pcl pointcloud to populate
+ * @param[out] cloud_stamp_out output timestamp of the cloud message to populate
+ * @param[in] return_index index of return desired starting at 0
+ * @param[in] tf_buffer the ROS TF buffer for looking up transforms
+ * @param[in] sensor_frame name of the sensor's frame to be used as the source frame of the TF
+ * @param[in] target_frame name of the target frame to transform the data to
+ * @param[in] fixed_frame name of a world-fixed frame to be used as the middle frame for the TF
+ */
 void scan_to_cloud_deskewed(
                    const ouster::XYZLut& xyz_lut,
-                   const ros::Time& scan_ts, const ouster::LidarScan& ls,
-                   ouster_ros::Cloud& cloud_out, int return_index,
+                   const ouster::LidarScan& ls,
+                   ouster_ros::Cloud& cloud_out,
+                   ros::Time& cloud_stamp_out,
+                   int return_index,
                    tf2_ros::Buffer & tf_buffer,
                    const std::string & sensor_frame,
                    const std::string & target_frame,

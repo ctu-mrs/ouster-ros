@@ -35,20 +35,13 @@
     }"/>
   <arg name="metadata" default=" " doc="path to write metadata file when receiving sensor data"/>
   <arg name="tf_prefix" default="$(env UAV_NAME)" doc="namespace for tf transforms"/>
-  <arg name="image" default="false" doc="publish range/intensity/ambient image topic"/>
+  <!-- <arg name="image" default="false" doc="publish range/intensity/ambient image topic"/> -->
   <arg name="replay" default="false" doc="do not connect to a sensor; expect /os_node/{lidar,imu}_packets from replay"/>
 
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
 
   <group ns="$(arg UAV_NAME)">
-
-  <!-- <group ns="$(arg ouster_ns)"> -->
-  <!--   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" -->
-  <!--     output="screen" required="true" -->
-  <!--     launch-prefix="bash -c 'sleep 2; $0 $@' $(arg launch_prefix)" -->
-  <!--     args="manager"/> -->
-  <!-- </group> -->
 
     <node unless="$(arg replay)" pkg="nodelet" type="nodelet" name="os_nodelet"
       output="screen" required="true"
@@ -83,38 +76,24 @@
       <remap from="get_metadata" to="os_nodelet/get_metadata" />
     </node>
 
-  <!-- <group ns="$(arg ouster_ns)"> -->
-    <!-- The driver may not start if os_cloud_nodelet launches before os_nodelet -->
     <node pkg="nodelet" type="nodelet" name="os_cloud_nodelet"
       output="screen" required="true"
-      launch-prefix="bash -c 'sleep 2; $0 $@' $(arg launch_prefix)"
+      launch-prefix="$(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterCloud $(arg nodelet_manager)">
-      <!-- <param name="fixed_frame" type="str" value="$(arg UAV_NAME)/accurate_origin"/> -->
       <param name="fixed_frame" type="str" value="$(arg deskew_fixed_frame)"/>
-      <param name="~/tf_prefix" type="str" value="$(arg tf_prefix)"/>
-      <param name="~/timestamp_mode" type="str" value="$(arg timestamp_mode)"/>
+      <param name="lookup_timeout_s" type="double" value="0.04"/>
+      <param name="tf_prefix" type="str" value="$(arg tf_prefix)"/>
+      <param name="timestamp_mode" type="str" value="$(arg timestamp_mode)"/>
       <remap from="os_config" to="os_nodelet/os_config"/>
       <remap from="lidar_packets" to="os_nodelet/lidar_packets"/>
       <remap from="imu_packets" to="os_nodelet/imu_packets"/>
       <remap from="imu" to="~imu"/>
-      <remap from="points" to="~points"/>
+      <remap if="$(eval deskew_fixed_frame == '')" from="points" to="~points"/>
+      <remap unless="$(eval deskew_fixed_frame == '')" from="points" to="~points_deskewed"/>
       <remap from="is_alive" to="~is_alive"/>
       <remap from="get_config" to="os_nodelet/get_config" />
       <remap from="get_metadata" to="os_nodelet/get_metadata" />
     </node>
-  <!-- </group> -->
-
-  <!-- <group ns="$(arg ouster_ns)"> -->
-    <node if="$(arg image)" pkg="nodelet" type="nodelet" name="os_img_nodelet"
-      output="screen" required="true"
-      launch-prefix="bash -c 'sleep 3; $0 $@' $(arg launch_prefix)"
-      args="$(arg nodelet) nodelets_os/OusterImage $(arg nodelet_manager)">
-      <remap from="~os_config" to="os_nodelet/os_config"/>
-      <remap from="~points" to="os_cloud_nodelet/points"/>
-      <remap from="~get_config" to="os_nodelet/get_config" />
-      <remap from="~get_metadata" to="os_nodelet/get_metadata" />
-    </node>
-  <!-- </group> -->
   </group>
 
 </launch>
