@@ -91,7 +91,9 @@
       <remap from="imu_packets" to="os_nodelet/imu_packets"/>
       <remap from="imu" to="~imu"/>
       <remap if="$(eval deskew_fixed_frame == '')" from="points" to="~points"/>
+      <remap if="$(eval deskew_fixed_frame == '')" from="points2" to="~points2"/>
       <remap unless="$(eval deskew_fixed_frame == '')" from="points" to="~points_deskewed"/>
+      <remap unless="$(eval deskew_fixed_frame == '')" from="points2" to="~points2_deskewed"/>
       <remap from="is_alive" to="~is_alive"/>
       <remap from="get_config" to="os_nodelet/get_config" />
       <remap from="get_metadata" to="os_nodelet/get_metadata" />

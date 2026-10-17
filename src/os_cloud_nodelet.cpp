@@ -19,6 +19,8 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
+#include <pcl_conversions/pcl_conversions.h>
+
 #include <algorithm>
 #include <chrono>
 #include <memory>
@@ -168,8 +170,10 @@ class OusterCloud : public nodelet::Nodelet {
 
             if (cloud_stamp_override.has_value())
               cloud_stamp = cloud_stamp_override.value();
-            sensor_msgs::PointCloud2 pc = ouster_ros::cloud_to_cloud_msg(cloud, cloud_stamp, sensor_frame);
-            sensor_msgs::PointCloud2Ptr pc_ptr = boost::make_shared<sensor_msgs::PointCloud2>(pc);
+            sensor_msgs::PointCloud2::Ptr pc_ptr = boost::make_shared<sensor_msgs::PointCloud2>();
+            pcl::toROSMsg(cloud, *pc_ptr);
+            pc_ptr->header.frame_id = sensor_frame;
+            pc_ptr->header.stamp = cloud_stamp;
             lidar_pubs[i].publish(pc_ptr);
 
             std_msgs::Bool alive_msg;
