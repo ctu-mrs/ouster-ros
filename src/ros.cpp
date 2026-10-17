@@ -13,6 +13,7 @@
 #include <chrono>
 #include <string>
 #include <vector>
+#include <optional>
 
 namespace ouster_ros {
 
@@ -117,9 +118,11 @@ inline ouster::img_t<T> get_or_fill_zero(sensor::ChanField f,
     return result;
 }
 
-void scan_to_cloud(const ouster::XYZLut& xyz_lut,
-                   ouster::LidarScan::ts_t scan_ts, const ouster::LidarScan& ls,
-                   ouster_ros::Cloud& cloud, int return_index) {
+bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
+                   const ouster::LidarScan& ls,
+                   ouster_ros::Cloud& cloud,
+                   ros::Time& cloud_stamp_out,
+                   int return_index) {
     bool second = (return_index == 1);
     cloud.resize(ls.w * ls.h);
 
@@ -135,14 +138,18 @@ void scan_to_cloud(const ouster::XYZLut& xyz_lut,
     ouster::img_t<uint16_t> reflectivity = get_or_fill_zero<uint16_t>(
         suitable_return(sensor::ChanField::REFLECTIVITY, second), ls);
 
-    auto points = ouster::cartesian(range, xyz_lut);
-    auto timestamp = ls.timestamp();
+    const auto points = ouster::cartesian(range, xyz_lut);
+    const auto& ts_raw = ls.timestamp();
+    const auto* first_stamp_ptr = std::find_if(ts_raw.data(), ts_raw.data() + ts_raw.size(),
+                            [](uint64_t h) { return h != 0; });
+    if (first_stamp_ptr == ts_raw.data() + ts_raw.size())
+      return false;
+    const auto first_stamp_internal = *first_stamp_ptr;
 
     for (auto u = 0; u < ls.h; u++) {
         for (auto v = 0; v < ls.w; v++) {
             const auto xyz = points.row(u * ls.w + v);
-            const auto ts =
-                (std::chrono::nanoseconds(timestamp[v]) - scan_ts).count();
+            const auto ts = ts_raw[v] == 0u ? 0u : ts_raw[v] - first_stamp_internal;
             cloud(v, u) = ouster_ros::Point{
                 {{static_cast<float>(xyz(0)), static_cast<float>(xyz(1)),
                   static_cast<float>(xyz(2)), 1.0f}},
@@ -154,6 +161,179 @@ void scan_to_cloud(const ouster::XYZLut& xyz_lut,
                 static_cast<uint32_t>(range(u, v))};
         }
     }
+
+    cloud_stamp_out.fromNSec(first_stamp_internal);
+    return true;
+}
+
+bool scan_to_cloud_deskewed(
+                   const ouster::XYZLut& xyz_lut,
+                   const ouster::LidarScan& ls,
+                   ouster_ros::Cloud& cloud_out,
+                   ros::Time& cloud_stamp_out,
+                   int return_index,
+                   tf2_ros::Buffer & tf_buffer,
+                   const std::string & sensor_frame,
+                   const std::string & target_frame,
+                   const std::string & fixed_frame,
+                   const ros::Duration& lookup_timeout)
+{
+    bool second = (return_index == 1);
+    cloud_out.resize(ls.w * ls.h);
+
+    ouster::img_t<uint16_t> near_ir = get_or_fill_zero<uint16_t>(
+        suitable_return(sensor::ChanField::NEAR_IR, second), ls);
+
+    ouster::img_t<uint32_t> range = get_or_fill_zero<uint32_t>(
+        suitable_return(sensor::ChanField::RANGE, second), ls);
+
+    ouster::img_t<uint32_t> signal = get_or_fill_zero<uint32_t>(
+        suitable_return(sensor::ChanField::SIGNAL, second), ls);
+
+    ouster::img_t<uint16_t> reflectivity = get_or_fill_zero<uint16_t>(
+        suitable_return(sensor::ChanField::REFLECTIVITY, second), ls);
+
+    const auto points = ouster::cartesian(range, xyz_lut);
+    const auto& ts_raw = ls.timestamp();
+
+    std::optional<uint64_t> start_ts = std::nullopt;
+    std::optional<uint64_t> end_ts = std::nullopt;
+    for (auto col_it = 0; col_it < ls.w; col_it++)
+    {
+      const auto& stamp = ts_raw(col_it);
+      if (stamp == 0)
+        continue;
+
+      end_ts = stamp;
+      if (!start_ts.has_value())
+        start_ts = stamp;
+    }
+
+    if (!start_ts.has_value() || !end_ts.has_value())
+    {
+      ROS_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Cloud has no timestamps! Not deskewing.");
+      return false;
+    }
+
+    const auto first_stamp_internal = start_ts.value();
+    const auto last_stamp_internal = end_ts.value();
+    const auto first_stamp_ros = ros::Time().fromNSec(first_stamp_internal);
+    const auto last_stamp_ros = ros::Time().fromNSec(last_stamp_internal);
+    geometry_msgs::TransformStamped fallback_tf;
+    try
+    {
+      fallback_tf = tf_buffer.lookupTransform(
+          target_frame,
+          first_stamp_ros,
+          sensor_frame,
+          last_stamp_ros,
+          fixed_frame,
+          lookup_timeout);
+    }
+    catch (const tf2::TransformException& ex)
+    {
+      ROS_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Cannot deskew: " << ex.what());
+      return false;
+    }
+
+    int invalid_tfs = 0;
+    int dropped_cols = 0;
+    for (auto col_it = 0; col_it < ls.w; col_it++)
+    {
+        const auto col_stamp_internal = ts_raw(col_it);
+        // check for dropped packets
+        if (col_stamp_internal == 0)
+        {
+          dropped_cols++;
+          // set all the points in this cloud to zero (the cloud is reused, not zeroed by default)
+          for (auto point_it = 0; point_it < ls.h; point_it++)
+          {
+            cloud_out(col_it, point_it) = 
+            {
+                {{0.0f, 0.0f, 0.0f, 1.0f}},
+                static_cast<float>(signal(point_it, col_it)),
+                0u,
+                static_cast<uint16_t>(reflectivity(point_it, col_it)),
+                static_cast<uint8_t>(point_it),
+                static_cast<uint16_t>(near_ir(point_it, col_it)),
+                0u
+            }; // a "correct" zero point
+          }
+          // then skip the rest of the code in this loop for this column
+          continue;
+        }
+        const auto col_dt = col_stamp_internal - first_stamp_internal;
+        const auto pt_stamp = first_stamp_ros + ros::Duration().fromNSec(col_dt);
+
+        // find the corresponding transformation
+        geometry_msgs::TransformStamped tf;
+        try
+        {
+/* virtual geometry_msgs::TransformStamped
+ * lookupTransform (
+ * const std::string &target_frame,
+ * const ros::Time &target_time,
+ * const std::string &source_frame,
+ * const ros::Time &source_time,
+ * const std::string &fixed_frame,
+ * const ros::Duration timeout
+ * ) const */
+            tf = tf_buffer.lookupTransform(
+                target_frame,
+                first_stamp_ros,
+                sensor_frame,
+                pt_stamp,
+                fixed_frame);
+        }
+        catch (const tf2::TransformException& ex)
+        {
+            invalid_tfs++;
+            tf = fallback_tf;
+        }
+        // interpret the transformation as an eigen matrix
+        const Eigen::Affine3d tf_eig = tf2::transformToEigen(tf.transform);
+
+        // create a temporary matrix of points in the scan column to be transformed
+        Eigen::Matrix<double, 3, Eigen::Dynamic> col_points;
+        col_points.resize(3, ls.h);
+        for (auto point_it = 0; point_it < ls.h; point_it++)
+            col_points.col(point_it) = points.row(point_it * ls.w + col_it);
+        // transform the points in the matrix
+        col_points = tf_eig * col_points;
+
+        for (auto point_it = 0; point_it < ls.h; point_it++)
+        {
+            const auto pt_range = range(point_it, col_it);
+            // each column in col_points represents one point corresponding to one row of the current column
+            // from the LiDAR's scan with index (row_it, col_it) ... a bit confusing, I know
+            // make sureo to preserve zero points correctly
+            const Eigen::Vector3f pt_eig = pt_range == 0 ? Eigen::Vector3f::Zero() : Eigen::Vector3f(col_points.col(point_it).cast<float>());
+            const ouster_ros::Point point
+            {
+                {{pt_eig.x(), pt_eig.y(), pt_eig.z(), 1.0f}},
+                static_cast<float>(signal(point_it, col_it)),
+                static_cast<uint32_t>(col_dt),
+                static_cast<uint16_t>(reflectivity(point_it, col_it)),
+                static_cast<uint8_t>(point_it),
+                static_cast<uint16_t>(near_ir(point_it, col_it)),
+                static_cast<uint32_t>(pt_range)
+            };
+            cloud_out(col_it, point_it) = point;
+        }
+    }
+    cloud_stamp_out = first_stamp_ros;
+
+    if (invalid_tfs > 0)
+    {
+        ROS_WARN_STREAM_THROTTLE(1.0, "Could not estimate motion from \"" << sensor_frame << "\" to \"" << target_frame << "\" through fixed frame \"" << fixed_frame << "\" - some points (" << invalid_tfs*cloud_out.height << "/" << cloud_out.size() << ") are not corrected based on motion.");
+    }
+
+    if (dropped_cols > 0)
+    {
+        ROS_WARN_STREAM_THROTTLE(1.0, "Some packets were lost (" << dropped_cols << " columns are missing) - some points (" << dropped_cols*cloud_out.height << "/" << cloud_out.size() << ") are missing.");
+    }
+
+    return true;
 }
 
 sensor_msgs::PointCloud2 cloud_to_cloud_msg(const Cloud& cloud,

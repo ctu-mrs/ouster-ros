@@ -358,11 +358,17 @@ class OusterSensor : public OusterClientBase {
         }
         if (state & sensor::LIDAR_DATA) {
             if (sensor::read_lidar_packet(cli, lidar_packet.buf.data(), pf))
+            {
+                lidar_packet.rcv_stamp = ros::Time::now();
                 lidar_packet_pub.publish(lidar_packet);
+            }
         }
         if (state & sensor::IMU_DATA) {
             if (sensor::read_imu_packet(cli, imu_packet.buf.data(), pf))
+            {
+                imu_packet.rcv_stamp = ros::Time::now();
                 imu_packet_pub.publish(imu_packet);
+            }
         }
     }
 

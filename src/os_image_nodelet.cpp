@@ -42,11 +42,13 @@ namespace nodelets_os {
 class OusterImage : public nodelet::Nodelet {
    private:
     virtual void onInit() override {
-        auto& nh = getNodeHandle();
+        auto& pnh = getPrivateNodeHandle();
         ros::Time::waitForValid();
 
+        NODELET_INFO_STREAM("[OusterImage]: Initializing.");
+
         ouster_ros::GetMetadata metadata{};
-        auto client = nh.serviceClient<ouster_ros::GetMetadata>("get_metadata");
+        auto client = pnh.serviceClient<ouster_ros::GetMetadata>("get_metadata");
         client.waitForExistence();
         if (!client.call(metadata)) {
             auto error_msg = "OusterImage: Calling get_metadata service failed";
@@ -65,7 +67,7 @@ class OusterImage : public nodelet::Nodelet {
                 : 1;
 
         nearir_image_pub =
-            nh.advertise<sensor_msgs::Image>("nearir_image", 100);
+            pnh.advertise<sensor_msgs::Image>("nearir_image", 100);
 
         auto topic = [](auto base, int ind) {
             if (ind == 0) return std::string(base);
@@ -76,15 +78,15 @@ class OusterImage : public nodelet::Nodelet {
         ros::Publisher a_pub;
         for (int i = 0; i < n_returns; i++) {
             a_pub =
-                nh.advertise<sensor_msgs::Image>(topic("range_image", i), 100);
+                pnh.advertise<sensor_msgs::Image>(topic("range_image", i), 100);
             range_image_pubs.push_back(a_pub);
 
             a_pub =
-                nh.advertise<sensor_msgs::Image>(topic("signal_image", i), 100);
+                pnh.advertise<sensor_msgs::Image>(topic("signal_image", i), 100);
             signal_image_pubs.push_back(a_pub);
 
             a_pub =
-                nh.advertise<sensor_msgs::Image>(topic("reflec_image", i), 100);
+                pnh.advertise<sensor_msgs::Image>(topic("reflec_image", i), 100);
             reflec_image_pubs.push_back(a_pub);
         }
 
@@ -93,11 +95,11 @@ class OusterImage : public nodelet::Nodelet {
         cloud = ouster_ros::Cloud{W, H};
 
         // image processing
-        pc1_sub = nh.subscribe<sensor_msgs::PointCloud2>(
+        pc1_sub = pnh.subscribe<sensor_msgs::PointCloud2>(
             topic("points", 0), 100, &OusterImage::first_cloud_handler, this);
 
         if (n_returns > 1) {
-            pc2_sub = nh.subscribe<sensor_msgs::PointCloud2>(
+            pc2_sub = pnh.subscribe<sensor_msgs::PointCloud2>(
                 topic("points", 1), 100, &OusterImage::second_cloud_handler,
                 this);
         }

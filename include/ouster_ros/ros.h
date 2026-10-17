@@ -17,6 +17,7 @@
 #include <sensor_msgs/PointCloud2.h>
 
 #include <geometry_msgs/TransformStamped.h>
+#include <tf2_ros/buffer.h>
 
 #include <chrono>
 #include <string>
@@ -82,15 +83,43 @@ sensor_msgs::Imu packet_to_imu_msg(const PacketMsg& pm,
 /**
  * Populate a PCL point cloud from a LidarScan
  * @param[in] xyz_lut lookup table from sensor beam angles (see lidar_scan.h)
- * @param[in] scan_ts scan start used to caluclate relative timestamps for
- * points
  * @param[in] ls input lidar data
  * @param[out] cloud output pcl pointcloud to populate
+ * @param[out] cloud_stamp_out output timestamp of the cloud message to populate
  * @param[in] return_index index of return desired starting at 0
  */
-void scan_to_cloud(const ouster::XYZLut& xyz_lut,
-                   ouster::LidarScan::ts_t scan_ts, const ouster::LidarScan& ls,
-                   ouster_ros::Cloud& cloud, int return_index = 0);
+bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
+                   const ouster::LidarScan& ls,
+                   ouster_ros::Cloud& cloud_out,
+                   ros::Time& cloud_stamp_out,
+                   int return_index = 0);
+
+/**
+ * Populate a PCL point cloud from a LidarScan
+ * @param[in] xyz_lut lookup table from sensor beam angles (see lidar_scan.h)
+ * @param[in] ls input lidar data
+ * @param[out] cloud output pcl pointcloud to populate
+ * @param[out] cloud_stamp_out output timestamp of the cloud message to populate
+ * @param[in] return_index index of return desired starting at 0
+ * @param[in] tf_buffer the ROS TF buffer for looking up transforms
+ * @param[in] sensor_frame name of the sensor's frame to be used as the source frame of the TF
+ * @param[in] target_frame name of the target frame to transform the data to
+ * @param[in] fixed_frame name of a world-fixed frame to be used as the middle frame for the TF
+ * @return true if the deskewed cloud was populated; false if deskewing was not possible (no valid column
+ * timestamps or the transformation is not available within lookup_timeout), in which case cloud_out is
+ * not populated - falling back to scan_to_cloud() is up to the caller
+ */
+bool scan_to_cloud_deskewed(
+                   const ouster::XYZLut& xyz_lut,
+                   const ouster::LidarScan& ls,
+                   ouster_ros::Cloud& cloud_out,
+                   ros::Time& cloud_stamp_out,
+                   int return_index,
+                   tf2_ros::Buffer & tf_buffer,
+                   const std::string & sensor_frame,
+                   const std::string & target_frame,
+                   const std::string & fixed_frame,
+                   const ros::Duration& lookup_timeout = ros::Duration(0.05));
 
 /**
  * Serialize a PCL point cloud to a ROS message
