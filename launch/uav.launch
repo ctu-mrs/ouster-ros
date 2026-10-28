@@ -41,6 +41,8 @@
   <arg name="metadata" default=" " doc="path to write metadata file when receiving sensor data"/>
   <arg name="tf_prefix" default="$(env UAV_NAME)" doc="namespace for tf transforms"/>
   <!-- <arg name="image" default="false" doc="publish range/intensity/ambient image topic"/> -->
+  <!-- prefix of the sensor-facing nodelet only (e.g. a wait for the PTP lock); runs before the debug prefix -->
+  <arg name="sensor_launch_prefix" default="" />
   <arg name="replay" default="false" doc="do not connect to a sensor; expect /os_node/{lidar,imu}_packets from replay"/>
 
   <arg name="nodelet" default="standalone" />
@@ -50,7 +52,7 @@
 
     <node unless="$(arg replay)" pkg="nodelet" type="nodelet" name="os_nodelet"
       output="screen" required="$(arg required)" respawn="$(arg respawn)" respawn_delay="3"
-      launch-prefix="$(arg launch_prefix)"
+      launch-prefix="$(arg sensor_launch_prefix) $(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterSensor $(arg nodelet_manager)">
       <param name="~/sensor_hostname" type="str" value="$(arg sensor_hostname)"/>
       <param name="~/udp_dest" type="str" value="$(arg udp_dest)"/>
