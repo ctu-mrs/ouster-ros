@@ -2,12 +2,16 @@
 
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
 
-  <arg name="deskew_fixed_frame" default="" />
-  <arg name="deskew_publish_raw_fallback" default="true" doc="publish the raw (not deskewed) cloud when deskewing fails" />
+  <arg name="respawn" default="true"/>
+  <arg unless="$(arg respawn)" name="required" value="true"/>
+  <arg     if="$(arg respawn)" name="required" value="false"/>
 
   <arg name="debug" default="false" />
   <arg unless="$(arg debug)" name="launch_prefix" value=""/>
   <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch"/>
+
+  <arg name="deskew_fixed_frame" default="" />
+  <arg name="deskew_publish_raw_fallback" default="true" doc="publish the raw (not deskewed) cloud when deskewing fails" />
 
   <!-- <arg name="ouster_ns" default="ouster" doc="Override the default namespace of all ouster nodes"/> -->
   <arg name="sensor_hostname" default="$(env OUSTER_IP)" doc="hostname or IP in dotted decimal form of the sensor"/>
@@ -45,7 +49,7 @@
   <group ns="$(arg UAV_NAME)">
 
     <node unless="$(arg replay)" pkg="nodelet" type="nodelet" name="os_nodelet"
-      output="screen" required="true"
+      output="screen" required="$(arg required)" respawn="$(arg respawn)" respawn_delay="3"
       launch-prefix="$(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterSensor $(arg nodelet_manager)">
       <param name="~/sensor_hostname" type="str" value="$(arg sensor_hostname)"/>
@@ -70,7 +74,7 @@
     </node>
 
     <node if="$(arg replay)" pkg="nodelet" type="nodelet" name="os_replay"
-      output="screen" required="true"
+      output="screen" required="$(arg required)" respawn="$(arg respawn)" respawn_delay="3"
       launch-prefix="$(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterReplay $(arg nodelet_manager)">
       <param name="~/metadata" value="$(arg metadata)"/>
@@ -78,7 +82,7 @@
     </node>
 
     <node pkg="nodelet" type="nodelet" name="os_cloud_nodelet"
-      output="screen" required="true"
+      output="screen" required="$(arg required)" respawn="$(arg respawn)" respawn_delay="3"
       launch-prefix="$(arg launch_prefix)"
       args="$(arg nodelet) nodelets_os/OusterCloud $(arg nodelet_manager)">
       <param name="deskew/fixed_frame" type="str" value="$(arg deskew_fixed_frame)"/>
