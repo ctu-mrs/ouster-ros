@@ -4,6 +4,7 @@
 
   <arg name="deskew_fixed_frame" default="" />
   <arg name="deskew_publish_raw_fallback" default="true" doc="publish the raw (not deskewed) cloud when deskewing fails" />
+  <arg name="deskew_ros_time_anchor" default="false" doc="allow deskewing without PTP by anchoring the sensor's relative column times at the scan-start receive time" />
 
   <arg name="debug" default="false" />
   <arg unless="$(arg debug)" name="launch_prefix" value=""/>
@@ -83,6 +84,7 @@
       args="$(arg nodelet) nodelets_os/OusterCloud $(arg nodelet_manager)">
       <param name="deskew/fixed_frame" type="str" value="$(arg deskew_fixed_frame)"/>
       <param name="deskew/publish_raw_fallback" type="bool" value="$(arg deskew_publish_raw_fallback)"/>
+      <param name="deskew/ros_time_anchor" type="bool" value="$(arg deskew_ros_time_anchor)"/>
       <param name="deskew/lookup_timeout_s" type="double" value="0.045"/>
       <param name="tf_prefix" type="str" value="$(arg tf_prefix)"/>
       <param name="timestamp_mode" type="str" value="$(arg timestamp_mode)"/>

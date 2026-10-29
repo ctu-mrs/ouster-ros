@@ -176,7 +176,8 @@ bool scan_to_cloud_deskewed(
                    const std::string & sensor_frame,
                    const std::string & target_frame,
                    const std::string & fixed_frame,
-                   const ros::Duration& lookup_timeout)
+                   const ros::Duration& lookup_timeout,
+                   const std::optional<ros::Time>& ros_time_anchor)
 {
     bool second = (return_index == 1);
     cloud_out.resize(ls.w * ls.h);
@@ -217,8 +218,13 @@ bool scan_to_cloud_deskewed(
 
     const auto first_stamp_internal = start_ts.value();
     const auto last_stamp_internal = end_ts.value();
-    const auto first_stamp_ros = ros::Time().fromNSec(first_stamp_internal);
-    const auto last_stamp_ros = ros::Time().fromNSec(last_stamp_internal);
+    // Without PTP the sensor's column clock is time-since-boot: absolute values are meaningless in
+    // ROS time, but the intra-scan offsets are accurate. An anchor maps the first column to a
+    // caller-supplied ROS time (the scan-start receive time), keeping the relative offsets.
+    const auto first_stamp_ros = ros_time_anchor.has_value()
+        ? ros_time_anchor.value()
+        : ros::Time().fromNSec(first_stamp_internal);
+    const auto last_stamp_ros = first_stamp_ros + ros::Duration().fromNSec(last_stamp_internal - first_stamp_internal);
     geometry_msgs::TransformStamped fallback_tf;
     try
     {

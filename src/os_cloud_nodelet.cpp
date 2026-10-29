@@ -63,11 +63,12 @@ class OusterCloud : public nodelet::Nodelet {
         deskewing.fixed_frame = pnh.param("deskew/fixed_frame", std::string{});
         deskewing.publish_raw_fallback = pnh.param("deskew/publish_raw_fallback", false);
         deskewing.lookup_timeout = ros::Duration(pnh.param("deskew/lookup_timeout_s", 0.05));
+        deskewing.ros_time_anchor = pnh.param("deskew/ros_time_anchor", false);
         if (!deskewing.fixed_frame.empty())
         {
-          if (use_ros_time)
+          if (use_ros_time && !deskewing.ros_time_anchor)
           {
-            const auto error_msg = "[OusterCloud]: Cannot enable deskewing without PTP time synchronization! Either unset fixed_frame or set timestamp_mode to TIME_FROM_PTP_1588 and configure PTP time sync.";
+            const auto error_msg = "[OusterCloud]: Cannot enable deskewing without PTP time synchronization! Either unset fixed_frame or set timestamp_mode to TIME_FROM_PTP_1588 and configure PTP time sync, or set deskew/ros_time_anchor to anchor the sensor's relative column times at the scan-start receive time.";
             NODELET_ERROR_STREAM(error_msg);
             throw std::runtime_error(error_msg);
           }
@@ -163,7 +164,8 @@ class OusterCloud : public nodelet::Nodelet {
                    sensor_frame,
                    sensor_frame,
                    deskewing.fixed_frame,
-                   deskewing.lookup_timeout);
+                   deskewing.lookup_timeout,
+                   deskewing.ros_time_anchor ? cloud_stamp_override : std::optional<ros::Time>{});
             }
 
             // if deskewing is disabled, just publish the raw cloud
@@ -263,6 +265,7 @@ class OusterCloud : public nodelet::Nodelet {
       std::string fixed_frame;
       ros::Duration lookup_timeout;
       bool publish_raw_fallback;
+      bool ros_time_anchor = false;
     } deskewing;
 
     std::string sensor_frame;

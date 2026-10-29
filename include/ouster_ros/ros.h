@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <string>
+#include <optional>
 
 #include "ouster/client.h"
 #include "ouster/lidar_scan.h"
@@ -119,7 +120,8 @@ bool scan_to_cloud_deskewed(
                    const std::string & sensor_frame,
                    const std::string & target_frame,
                    const std::string & fixed_frame,
-                   const ros::Duration& lookup_timeout = ros::Duration(0.05));
+                   const ros::Duration& lookup_timeout = ros::Duration(0.05),
+                   const std::optional<ros::Time>& ros_time_anchor = std::nullopt);
 
 /**
  * Serialize a PCL point cloud to a ROS message
