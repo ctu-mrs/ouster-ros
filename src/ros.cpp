@@ -11,6 +11,7 @@
 #include <tf2_eigen/tf2_eigen.h>
 
 #include <chrono>
+#include <limits>
 #include <string>
 #include <vector>
 #include <optional>
@@ -118,11 +119,24 @@ inline ouster::img_t<T> get_or_fill_zero(sensor::ChanField f,
     return result;
 }
 
+/* An excluded point is marked with NaN coordinates, not zeroed out: the consumers have to be able to tell it apart
+ * from a point of a beam that got no return (which is zero). Raycasting through a beam that got no return marks the
+ * space along it as free, which must not happen for a beam that the robot's own body blocked.
+ *
+ * The cloud therefore stops being dense and says so (see scan_to_cloud and scan_to_cloud_deskewed) - PCL filters only
+ * check the points for NaNs when is_dense is false.
+ */
+static void exclude_point(ouster_ros::Point& point) {
+    point.x = point.y = point.z = std::numeric_limits<float>::quiet_NaN();
+    point.range = 0u;
+}
+
 bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
                    const ouster::LidarScan& ls,
                    ouster_ros::Cloud& cloud,
                    ros::Time& cloud_stamp_out,
-                   int return_index) {
+                   int return_index,
+                   const ExclusionBoxes& exclusion) {
     bool second = (return_index == 1);
     cloud.resize(ls.w * ls.h);
 
@@ -159,9 +173,13 @@ bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
                 static_cast<uint8_t>(u),
                 static_cast<uint16_t>(near_ir(u, v)),
                 static_cast<uint32_t>(range(u, v))};
+            if (!exclusion.empty() && range(u, v) != 0 &&
+                exclusion.excludes(cloud(v, u).getVector3fMap()))
+              exclude_point(cloud(v, u));
         }
     }
 
+    cloud.is_dense = exclusion.empty();
     cloud_stamp_out.fromNSec(first_stamp_internal);
     return true;
 }
@@ -176,7 +194,8 @@ bool scan_to_cloud_deskewed(
                    const std::string & sensor_frame,
                    const std::string & target_frame,
                    const std::string & fixed_frame,
-                   const ros::Duration& lookup_timeout)
+                   const ros::Duration& lookup_timeout,
+                   const ExclusionBoxes& exclusion)
 {
     bool second = (return_index == 1);
     cloud_out.resize(ls.w * ls.h);
@@ -238,6 +257,8 @@ bool scan_to_cloud_deskewed(
 
     int invalid_tfs = 0;
     int dropped_cols = 0;
+    // marks the points of the current column that fall into an exclusion box
+    std::vector<char> excluded(ls.h, 0);
     for (auto col_it = 0; col_it < ls.w; col_it++)
     {
         const auto col_stamp_internal = ts_raw(col_it);
@@ -298,6 +319,13 @@ bool scan_to_cloud_deskewed(
         col_points.resize(3, ls.h);
         for (auto point_it = 0; point_it < ls.h; point_it++)
             col_points.col(point_it) = points.row(point_it * ls.w + col_it);
+
+        // the exclusion boxes have to be applied to the raw points - the deskewing below displaces
+        // the returns from the robot itself by the sensor's own motion during the scan
+        if (!exclusion.empty())
+            for (auto point_it = 0; point_it < ls.h; point_it++)
+                excluded[point_it] = exclusion.excludes(col_points.col(point_it).cast<float>());
+
         // transform the points in the matrix
         col_points = tf_eig * col_points;
 
@@ -319,8 +347,12 @@ bool scan_to_cloud_deskewed(
                 static_cast<uint32_t>(pt_range)
             };
             cloud_out(col_it, point_it) = point;
+            // a beam with no return keeps its zeros, a point inside an exclusion box is marked with NaNs
+            if (excluded[point_it])
+              exclude_point(cloud_out(col_it, point_it));
         }
     }
+    cloud_out.is_dense = exclusion.empty();
     cloud_stamp_out = first_stamp_ros;
 
     if (invalid_tfs > 0)
