@@ -324,7 +324,10 @@ bool scan_to_cloud_deskewed(
         // the returns from the robot itself by the sensor's own motion during the scan
         if (!exclusion.empty())
             for (auto point_it = 0; point_it < ls.h; point_it++)
-                excluded[point_it] = exclusion.excludes(col_points.col(point_it).cast<float>());
+                // a beam with no return is a zero, which lies in the sensor's own origin and would land inside the
+                // boxes - only a point that actually returned can be inside one
+                excluded[point_it] = range(point_it, col_it) != 0
+                                  && exclusion.excludes(col_points.col(point_it).cast<float>());
 
         // transform the points in the matrix
         col_points = tf_eig * col_points;
