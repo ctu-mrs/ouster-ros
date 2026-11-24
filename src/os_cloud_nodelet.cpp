@@ -79,6 +79,8 @@ class OusterCloud : public nodelet::Nodelet {
           deskewing.enabled = true;
         }
 
+        publish_full_scans = pnh.param("publish_full_scans", true);
+
         exclusion_frame = pnh.param("exclude_boxes/frame_id", std::string{});
         if (is_arg_set(exclusion_frame))
           exclusion_boxes_cfg = load_exclusion_boxes(pnh);
@@ -107,8 +109,6 @@ class OusterCloud : public nodelet::Nodelet {
         NODELET_INFO("[OusterCloud]: retrieved sensor metadata!");
 
         info = sensor::parse_metadata(metadata.response.metadata);
-        uint32_t H = info.format.pixels_per_column;
-        uint32_t W = info.format.columns_per_frame;
 
         n_returns = info.format.udp_profile_lidar ==
                             UDPProfileLidar::PROFILE_RNG19_RFL8_SIG16_NIR16_DUAL
@@ -133,12 +133,35 @@ class OusterCloud : public nodelet::Nodelet {
             lidar_pubs[i] = pub;
         }
 
-        xyz_lut = ouster::make_xyz_lut(info);
+        if (publish_full_scans)
+        {
+          const uint32_t H = info.format.pixels_per_column;
+          const uint32_t W = info.format.columns_per_frame;
+          ls = ouster::LidarScan{W, H, info.format.udp_profile_lidar};
+          cloud = ouster_ros::Cloud{W, H};
+          scan_batcher = std::make_unique<ouster::ScanBatcher>(info, true);
+          xyz_luts = {ouster::make_xyz_lut(info)};
+        }
+        else
+        {
+          // if individual packets are published as pointclouds, the number of columns is different
+          const uint32_t H = info.format.pixels_per_column;
+          const uint32_t W = info.format.columns_per_packet;
+          ls = ouster::LidarScan{W, H, info.format.udp_profile_lidar};
+          cloud = ouster_ros::Cloud{W, H};
+          scan_batcher = std::make_unique<ouster::ScanBatcher>(info, false);
 
-        ls = ouster::LidarScan{W, H, info.format.udp_profile_lidar};
-        cloud = ouster_ros::Cloud{W, H};
-
-        scan_batcher = std::make_unique<ouster::ScanBatcher>(info);
+          const auto xyz_lut_full = ouster::make_xyz_lut(info);
+          const int packets_per_frame = info.format.columns_per_frame / info.format.columns_per_packet;
+          for (int it = 0; it < packets_per_frame; it++)
+          {
+            const int start_col = it * info.format.columns_per_packet;
+            const int num_cols = info.format.columns_per_packet;
+            const ouster::LidarScan::Points direction = xyz_lut_full.direction.middleCols(start_col, num_cols);
+            const ouster::LidarScan::Points offset = xyz_lut_full.offset.middleCols(start_col, num_cols);
+            xyz_luts.emplace_back(direction, offset);
+          }
+        }
 
         auto lidar_handler = use_ros_time
                                  ? &OusterCloud::lidar_handler_ros_time
@@ -240,7 +263,7 @@ class OusterCloud : public nodelet::Nodelet {
             ros::Time cloud_stamp;
             if (deskewing.enabled)
             {
-              cloud_ok = scan_to_cloud_deskewed(xyz_lut, ls, cloud, cloud_stamp, i,
+              cloud_ok = scan_to_cloud_deskewed(xyz_luts.at(packet_offset), ls, cloud, cloud_stamp, i,
                    tf_buffer,
                    sensor_frame,
                    sensor_frame,
@@ -252,7 +275,7 @@ class OusterCloud : public nodelet::Nodelet {
             // if deskewing is disabled, just publish the raw cloud
             // if it is enabled and failed, only publish if publish_raw_fallback is true
             if (!deskewing.enabled || (!cloud_ok && deskewing.publish_raw_fallback))
-              cloud_ok = scan_to_cloud(xyz_lut, ls, cloud, cloud_stamp, i, exclusion);
+              cloud_ok = scan_to_cloud(xyz_luts.at(packet_offset), ls, cloud, cloud_stamp, i, exclusion);
 
             if (!cloud_ok)
             {
@@ -280,7 +303,8 @@ class OusterCloud : public nodelet::Nodelet {
     }
 
     void lidar_handler_sensor_time(const PacketMsg::ConstPtr& packet) {
-        if (!(*scan_batcher)(packet->buf.data(), ls)) return;
+        if (!(*scan_batcher)(packet->buf.data(), ls))
+          return;
         convert_scan_to_pointcloud_publish();
     }
 
@@ -292,7 +316,8 @@ class OusterCloud : public nodelet::Nodelet {
         if (last_frame_ts == ros::Time(0))
           last_frame_ts = packet_receive_time;  // set time for next point cloud msg
 
-        if (!(*scan_batcher)(packet->buf.data(), ls)) return;
+        if (!(*scan_batcher)(packet->buf.data(), ls))
+          return;
         convert_scan_to_pointcloud_publish(last_frame_ts);
         last_frame_ts = packet_receive_time;  // set time for next point cloud msg
     }
@@ -330,7 +355,8 @@ class OusterCloud : public nodelet::Nodelet {
     sensor::sensor_info info;
     int n_returns = 0;
 
-    ouster::XYZLut xyz_lut;
+    // per-packet XYZ LUT if publish_full_scans == false, otherwise just a single LUT for the whole scan
+    std::vector<ouster::XYZLut> xyz_luts;
     ouster::LidarScan ls;
     ouster_ros::Cloud cloud;
     std::unique_ptr<ouster::ScanBatcher> scan_batcher;
@@ -352,6 +378,8 @@ class OusterCloud : public nodelet::Nodelet {
     std::string exclusion_frame;
     std::vector<ouster_ros::ExclusionBox> exclusion_boxes_cfg;
     ouster_ros::ExclusionBoxes exclusion;
+
+    bool publish_full_scans;
 
     std::string sensor_frame;
     std::string imu_frame;
