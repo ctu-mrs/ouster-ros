@@ -13,6 +13,10 @@
   <arg name="deskew_fixed_frame" default="" />
   <arg name="deskew_publish_raw_fallback" default="true" doc="publish the raw (not deskewed) cloud when deskewing fails" />
 
+  <!-- points inside the exclusion boxes (the robot itself) are zeroed out before the deskewing -->
+  <arg name="exclude_boxes_frame_id" default="" doc="frame in which the exclusion boxes are defined; empty disables the exclusion" />
+  <arg name="exclude_boxes_config" default="" doc="file with the exclusion boxes, see config/exclude_boxes_example.yaml for the format" />
+
   <!-- <arg name="ouster_ns" default="ouster" doc="Override the default namespace of all ouster nodes"/> -->
   <arg name="sensor_hostname" default="$(env OUSTER_IP)" doc="hostname or IP in dotted decimal form of the sensor"/>
   <arg name="udp_dest" default="$(env OUSTER_UDP_DEST_IP)" doc="hostname or IP where the sensor will send data packets"/>
@@ -90,6 +94,8 @@
       <param name="deskew/fixed_frame" type="str" value="$(arg deskew_fixed_frame)"/>
       <param name="deskew/publish_raw_fallback" type="bool" value="$(arg deskew_publish_raw_fallback)"/>
       <param name="deskew/lookup_timeout_s" type="double" value="0.045"/>
+      <param name="exclude_boxes/frame_id" type="str" value="$(arg exclude_boxes_frame_id)"/>
+      <rosparam unless="$(eval exclude_boxes_frame_id == '' or exclude_boxes_config == '')" ns="exclude_boxes/boxes" file="$(arg exclude_boxes_config)"/>
       <param name="tf_prefix" type="str" value="$(arg tf_prefix)"/>
       <param name="timestamp_mode" type="str" value="$(arg timestamp_mode)"/>
       <remap from="os_config" to="os_nodelet/os_config"/>

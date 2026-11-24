@@ -19,8 +19,12 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <tf2_ros/buffer.h>
 
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
 #include <chrono>
 #include <string>
+#include <vector>
 
 #include "ouster/client.h"
 #include "ouster/lidar_scan.h"
@@ -33,6 +37,43 @@ namespace ouster_ros {
 namespace sensor = ouster::sensor;
 using Cloud = pcl::PointCloud<Point>;
 using ns = std::chrono::nanoseconds;
+
+/**
+ * An axis-aligned box of points to be discarded from the scans.
+ */
+struct ExclusionBox {
+    Eigen::Vector3f min_pt;
+    Eigen::Vector3f max_pt;
+};
+
+/**
+ * Boxes of points to be discarded from the scans (typically the returns from the robot carrying the
+ * sensor), together with the transformation from the sensor frame to the frame in which the boxes
+ * are defined.
+ *
+ * The points have to be discarded before the scan is deskewed. Deskewing assumes a static world, so
+ * it displaces everything that is static relative to the sensor - the robot's own body - by the
+ * sensor's motion during the scan, after which such returns no longer lie within the boxes.
+ *
+ * The clouds are organized, so an excluded point cannot be dropped. It is zeroed out instead,
+ * exactly like a point from a lost column: zero coordinates and zero range.
+ */
+struct ExclusionBoxes {
+    std::vector<ExclusionBox> boxes;
+    // transforms a point from the sensor frame to the frame in which the boxes are defined
+    Eigen::Affine3f sensor_to_boxes_tf = Eigen::Affine3f::Identity();
+
+    bool empty() const { return boxes.empty(); }
+
+    bool excludes(const Eigen::Vector3f& point) const {
+        const Eigen::Vector3f pt = sensor_to_boxes_tf * point;
+        for (const auto& box : boxes)
+            if ((pt.array() >= box.min_pt.array()).all() &&
+                (pt.array() <= box.max_pt.array()).all())
+                return true;
+        return false;
+    }
+};
 
 /**
  * Read an imu packet into a ROS message. Blocks for up to a second if no data
@@ -87,12 +128,14 @@ sensor_msgs::Imu packet_to_imu_msg(const PacketMsg& pm,
  * @param[out] cloud output pcl pointcloud to populate
  * @param[out] cloud_stamp_out output timestamp of the cloud message to populate
  * @param[in] return_index index of return desired starting at 0
+ * @param[in] exclusion boxes of points to be zeroed out (see ExclusionBoxes)
  */
 bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
                    const ouster::LidarScan& ls,
                    ouster_ros::Cloud& cloud_out,
                    ros::Time& cloud_stamp_out,
-                   int return_index = 0);
+                   int return_index = 0,
+                   const ExclusionBoxes& exclusion = ExclusionBoxes{});
 
 /**
  * Populate a PCL point cloud from a LidarScan
@@ -105,6 +148,8 @@ bool scan_to_cloud(const ouster::XYZLut& xyz_lut,
  * @param[in] sensor_frame name of the sensor's frame to be used as the source frame of the TF
  * @param[in] target_frame name of the target frame to transform the data to
  * @param[in] fixed_frame name of a world-fixed frame to be used as the middle frame for the TF
+ * @param[in] lookup_timeout how long to wait for the transformation to become available
+ * @param[in] exclusion boxes of points to be zeroed out before the deskewing (see ExclusionBoxes)
  * @return true if the deskewed cloud was populated; false if deskewing was not possible (no valid column
  * timestamps or the transformation is not available within lookup_timeout), in which case cloud_out is
  * not populated - falling back to scan_to_cloud() is up to the caller
@@ -119,7 +164,8 @@ bool scan_to_cloud_deskewed(
                    const std::string & sensor_frame,
                    const std::string & target_frame,
                    const std::string & fixed_frame,
-                   const ros::Duration& lookup_timeout = ros::Duration(0.05));
+                   const ros::Duration& lookup_timeout = ros::Duration(0.05),
+                   const ExclusionBoxes& exclusion = ExclusionBoxes{});
 
 /**
  * Serialize a PCL point cloud to a ROS message

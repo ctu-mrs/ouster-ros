@@ -1,0 +1,29 @@
+# Boxes of points discarded from the scans before they are deskewed - the returns from the robot
+# carrying the sensor. The boxes are defined in the frame given by the exclude_boxes_frame_id
+# argument of uav.launch (typically the FCU frame) and are only applied once that transformation
+# becomes available.
+#
+# offset: the center of the box in x and y, its bottom in z
+# size:   the full size of the box in each axis
+#
+# The values below are an example - use the ones measured on your robot.
+
+body_exclude_box:
+  offset:
+    x: 0.0 # meters
+    y: 0.0 # meters
+    z: -0.36 # meters
+  size:
+    x: 1.88 # meters
+    y: 1.88 # meters
+    z: 0.80 # meters
+
+net_exclude_box:
+  offset:
+    x: 0.0 # meters
+    y: 0.0 # meters
+    z: -1.25 # meters
+  size:
+    x: 0.80 # meters
+    y: 1.35 # meters
+    z: 0.94 # meters
