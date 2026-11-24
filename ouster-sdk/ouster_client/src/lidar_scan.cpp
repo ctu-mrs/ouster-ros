@@ -106,6 +106,7 @@ LidarScan::LidarScan(
       field_types_{std::move(field_types)},
       w{static_cast<std::ptrdiff_t>(w)},
       h{static_cast<std::ptrdiff_t>(h)},
+      packet_offset{0},
       headers{w, BlockHeader{ts_t{0}, 0, 0}} {
     // TODO: error on duplicate fields
     for (const auto& ft : field_types_) {
@@ -294,8 +295,8 @@ ScanBatcher::ScanBatcher(size_t w, const sensor::packet_format& pf, bool batch_f
       h(pf.pixels_per_column),
       next_m_id(0),
       cache(pf.lidar_packet_size),
-      pf(pf),
-      batch_full_scans(batch_full_scans)
+      batch_full_scans(batch_full_scans),
+      pf(pf)
       {}
 
 ScanBatcher::ScanBatcher(const sensor::sensor_info& info, bool batch_full_scans)
@@ -378,11 +379,13 @@ bool ScanBatcher::operator()(const uint8_t* packet_buf, LidarScan& ls) {
       // got a packet from a "new frame" since each packet is a new frame
       const uint16_t f_id = pf.frame_id(packet_buf);
       ls.frame_id = f_id;
-      impl::foreach_field(ls, zero_field_cols(), 0, pf.columns_per_packet);
-      zero_header_cols(ls, 0, pf.columns_per_packet);
-      std::memcpy(cache.data(), packet_buf, cache.size());
-      return true;
+      impl::foreach_field(ls, zero_field_cols(), 0, w);
+      zero_header_cols(ls, 0, w);
     }
+
+    // get the packet offset even if the first column is invalid
+    if (!batch_full_scans)
+      ls.packet_offset = pf.col_measurement_id(pf.nth_col(0, packet_buf)) / pf.columns_per_packet;
 
     // parse measurement blocks
     for (int icol = 0; icol < pf.columns_per_packet; icol++) {

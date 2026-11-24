@@ -13,7 +13,7 @@
   <arg name="deskew_fixed_frame" default="" />
   <arg name="deskew_publish_raw_fallback" default="true" doc="publish the raw (not deskewed) cloud when deskewing fails" />
 
-  <arg name="publish_full_scans" default="true" doc="wait for the full skan to arrive before publishing the cloud" />
+  <arg name="publish_full_scans" default="true" doc="wait for the full scan to arrive before publishing the cloud" />
 
   <!-- points inside the exclusion boxes (the robot itself) are zeroed out before the deskewing -->
   <arg name="exclude_boxes_frame_id" default="" doc="frame in which the exclusion boxes are defined; empty disables the exclusion" />
@@ -96,6 +96,7 @@
       <param name="deskew/fixed_frame" type="str" value="$(arg deskew_fixed_frame)"/>
       <param name="deskew/publish_raw_fallback" type="bool" value="$(arg deskew_publish_raw_fallback)"/>
       <param name="deskew/lookup_timeout_s" type="double" value="0.045"/>
+      <param name="publish_full_scans" type="bool" value="$(arg publish_full_scans)"/>
       <param name="exclude_boxes/frame_id" type="str" value="$(arg exclude_boxes_frame_id)"/>
       <rosparam unless="$(eval exclude_boxes_frame_id == '' or exclude_boxes_config == '')" ns="exclude_boxes/boxes" file="$(arg exclude_boxes_config)"/>
       <param name="tf_prefix" type="str" value="$(arg tf_prefix)"/>

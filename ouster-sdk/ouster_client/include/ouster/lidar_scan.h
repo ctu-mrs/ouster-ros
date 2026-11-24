@@ -107,6 +107,16 @@ class LidarScan {
     std::ptrdiff_t h{0};
 
     /**
+     * Number of the packet within the scan.
+     *
+     * Used for the non-full scan batching mode to signify to which packet the LidarScan corresponds.
+     *
+     * @warning Members variables: use with caution, some of these will become
+     * private.
+     */
+    std::uint32_t packet_offset{0};
+
+    /**
      * Vector containing the header definitions.
      *
      * @deprecated BlockHeader is deprecated in favor of Header

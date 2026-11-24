@@ -62,6 +62,8 @@ class OusterCloud : public nodelet::Nodelet {
         // fall back to ROS timestamping of messages if PTP time sync is not available
         use_ros_time = timestamp_mode_arg != "TIME_FROM_PTP_1588";
 
+        publish_full_scans = pnh.param("publish_full_scans", true);
+
         deskewing.enabled = false;
         deskewing.fixed_frame = pnh.param("deskew/fixed_frame", std::string{});
         deskewing.publish_raw_fallback = pnh.param("deskew/publish_raw_fallback", false);
@@ -75,11 +77,12 @@ class OusterCloud : public nodelet::Nodelet {
             throw std::runtime_error(error_msg);
           }
 
+          if (!publish_full_scans)
+            NODELET_WARN_STREAM("[OusterCloud]: Enabled deskewing and per-packet publishing (publish_full_scans == false) at the same time! Per-packet deskewing is almost meaningless - is this intended? This may cause issues due to TF lookup delays!");
+
           NODELET_INFO_STREAM("[OusterCloud]: Enabling deskewed using \"" << deskewing.fixed_frame << "\" as the fixed frame.");
           deskewing.enabled = true;
         }
-
-        publish_full_scans = pnh.param("publish_full_scans", true);
 
         exclusion_frame = pnh.param("exclude_boxes/frame_id", std::string{});
         if (is_arg_set(exclusion_frame))
@@ -144,22 +147,38 @@ class OusterCloud : public nodelet::Nodelet {
         }
         else
         {
-          // if individual packets are published as pointclouds, the number of columns is different
           const uint32_t H = info.format.pixels_per_column;
+          const uint32_t W_full = info.format.columns_per_frame;
           const uint32_t W = info.format.columns_per_packet;
+
+          if (W == 0 || W_full % W != 0)
+          {
+            const auto error_msg = "[OusterCloud]: columns_per_frame (" + std::to_string(W_full) +
+                                     ") is not divisible by columns_per_packet (" + std::to_string(W) +
+                                     "), cannot publish per-packet clouds";
+            NODELET_ERROR_STREAM(error_msg);
+            throw std::runtime_error(error_msg);
+          }
+
           ls = ouster::LidarScan{W, H, info.format.udp_profile_lidar};
           cloud = ouster_ros::Cloud{W, H};
           scan_batcher = std::make_unique<ouster::ScanBatcher>(W, sensor::get_format(info), false);
 
-          const auto xyz_lut_full = ouster::make_xyz_lut(info);
-          const int packets_per_frame = info.format.columns_per_frame / info.format.columns_per_packet;
-          for (int it = 0; it < packets_per_frame; it++)
+          // the full LUT is row-major for some reason... it thus needs to be reordered per-packet
+          const auto lut_full = ouster::make_xyz_lut(info);
+          const int packets_per_frame = W_full / W;
+          xyz_luts.resize(packets_per_frame);
+          for (int pit = 0; pit < packets_per_frame; pit++)
           {
-            const int start_col = it * info.format.columns_per_packet;
-            const int num_cols = info.format.columns_per_packet;
-            auto& cur_lut = xyz_luts.emplace_back();
-            cur_lut.direction = xyz_lut_full.direction.middleCols(start_col, num_cols);
-            cur_lut.offset = xyz_lut_full.offset.middleCols(start_col, num_cols);
+            const uint32_t start_col = pit * W;
+            auto& lut = xyz_luts.at(pit);
+            lut.direction.resize(W * H, 3);
+            lut.offset.resize(W * H, 3);
+            for (uint32_t u = 0; u < H; u++)
+            {
+              lut.direction.middleRows(u * W, W) = lut_full.direction.middleRows(u * W_full + start_col, W);
+              lut.offset.middleRows(u * W, W)    = lut_full.offset.middleRows(u * W_full + start_col, W);
+            }
           }
         }
 
@@ -259,12 +278,14 @@ class OusterCloud : public nodelet::Nodelet {
 
         for (int i = 0; i < n_returns; ++i) {
 
-            const auto packet_offset = ls.measurement_id()(0);
             bool cloud_ok = false;
             ros::Time cloud_stamp;
             if (deskewing.enabled)
             {
-              cloud_ok = scan_to_cloud_deskewed(xyz_luts.at(packet_offset), ls, cloud, cloud_stamp, i,
+              if (!publish_full_scans)
+                NODELET_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Enabled deskewing and per-packet publishing (publish_full_scans == false) at the same time! Per-packet deskewing is almost meaningless - is this intended? This may cause issues due to TF lookup delays!");
+
+              cloud_ok = scan_to_cloud_deskewed(xyz_luts.at(ls.packet_offset), ls, cloud, cloud_stamp, i,
                    tf_buffer,
                    sensor_frame,
                    sensor_frame,
@@ -276,7 +297,7 @@ class OusterCloud : public nodelet::Nodelet {
             // if deskewing is disabled, just publish the raw cloud
             // if it is enabled and failed, only publish if publish_raw_fallback is true
             if (!deskewing.enabled || (!cloud_ok && deskewing.publish_raw_fallback))
-              cloud_ok = scan_to_cloud(xyz_luts.at(packet_offset), ls, cloud, cloud_stamp, i, exclusion);
+              cloud_ok = scan_to_cloud(xyz_luts.at(ls.packet_offset), ls, cloud, cloud_stamp, i, exclusion);
 
             if (!cloud_ok)
             {
@@ -319,7 +340,8 @@ class OusterCloud : public nodelet::Nodelet {
 
         if (!(*scan_batcher)(packet->buf.data(), ls))
           return;
-        convert_scan_to_pointcloud_publish(last_frame_ts);
+        const auto cur_frame_ts = publish_full_scans ? last_frame_ts : packet_receive_time;
+        convert_scan_to_pointcloud_publish(cur_frame_ts);
         last_frame_ts = packet_receive_time;  // set time for next point cloud msg
     }
 
@@ -380,7 +402,7 @@ class OusterCloud : public nodelet::Nodelet {
     std::vector<ouster_ros::ExclusionBox> exclusion_boxes_cfg;
     ouster_ros::ExclusionBoxes exclusion;
 
-    bool publish_full_scans;
+    bool publish_full_scans = true;
 
     std::string sensor_frame;
     std::string imu_frame;
