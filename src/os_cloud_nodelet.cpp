@@ -47,6 +47,8 @@ class OusterCloud : public nodelet::Nodelet {
 
     void onInit() override {
         auto& pnh = getPrivateNodeHandle();
+        if (!ros::Time::isValid())
+          NODELET_WARN("[OusterCloud]: Waiting for valid ROS time (use_sim_time is set but no /clock?)...");
         ros::Time::waitForValid();
 
         NODELET_INFO_STREAM("[OusterCloud]: Initializing.");
@@ -282,9 +284,6 @@ class OusterCloud : public nodelet::Nodelet {
             ros::Time cloud_stamp;
             if (deskewing.enabled)
             {
-              if (!publish_full_scans)
-                NODELET_WARN_STREAM_THROTTLE(1.0, "[OusterCloud]: Enabled deskewing and per-packet publishing (publish_full_scans == false) at the same time! Per-packet deskewing is almost meaningless - is this intended? This may cause issues due to TF lookup delays!");
-
               cloud_ok = scan_to_cloud_deskewed(xyz_luts.at(ls.packet_offset), ls, cloud, cloud_stamp, i,
                    tf_buffer,
                    sensor_frame,
