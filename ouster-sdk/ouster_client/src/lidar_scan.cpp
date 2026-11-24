@@ -289,15 +289,17 @@ LidarScan::Points cartesian(const Eigen::Ref<const img_t<uint32_t>>& range,
     return (nooffset.array() == 0.0).select(nooffset, nooffset + lut.offset);
 }
 
-ScanBatcher::ScanBatcher(size_t w, const sensor::packet_format& pf)
+ScanBatcher::ScanBatcher(size_t w, const sensor::packet_format& pf, bool batch_full_scans)
     : w(w),
       h(pf.pixels_per_column),
       next_m_id(0),
       cache(pf.lidar_packet_size),
-      pf(pf) {}
+      pf(pf),
+      batch_full_scans(batch_full_scans)
+      {}
 
 ScanBatcher::ScanBatcher(const sensor::sensor_info& info, bool batch_full_scans)
-    : ScanBatcher(info.format.columns_per_frame, sensor::get_format(info)), batch_full_scans(batch_full_scans) {}
+    : ScanBatcher(info.format.columns_per_frame, sensor::get_format(info), batch_full_scans) {}
 
 namespace {
 
@@ -321,7 +323,7 @@ void zero_header_cols(LidarScan& ls, std::ptrdiff_t start, std::ptrdiff_t end) {
     ls.status().segment(start, end - start).setZero();
 
     // zero deprecated header blocks
-    for (auto m_id = start; m_id < end; m_id++) ls.header(m_id) = {};
+    for (auto col_idx = start; col_idx < end; col_idx++) ls.header(col_idx) = {};
 }
 
 /*
@@ -330,10 +332,10 @@ void zero_header_cols(LidarScan& ls, std::ptrdiff_t start, std::ptrdiff_t end) {
  */
 struct parse_field_col {
     template <typename T>
-    void operator()(Eigen::Ref<img_t<T>> field, ChanField f, uint16_t m_id,
+    void operator()(Eigen::Ref<img_t<T>> field, ChanField f, uint16_t col_idx,
                     const sensor::packet_format& pf, const uint8_t* col_buf) {
         if (f >= ChanField::CUSTOM0 && f <= ChanField::CUSTOM9) return;
-        pf.col_field(col_buf, f, field.col(m_id).data(), field.cols());
+        pf.col_field(col_buf, f, field.col(col_idx).data(), field.cols());
     }
 };
 
@@ -391,25 +393,27 @@ bool ScanBatcher::operator()(const uint8_t* packet_buf, LidarScan& ls) {
         const uint32_t status = pf.col_status(col_buf);
         const bool valid = (status & 0x01);
 
+        const size_t lidar_scan_idx = batch_full_scans ? m_id : icol;
+
         // drop invalid / out-of-bounds data in case of misconfiguration
-        if (!valid || m_id >= w) continue;
+        if (!valid || lidar_scan_idx >= w) continue;
 
         // zero out missing columns if we jumped forward
-        if (m_id >= next_m_id) {
+        if (batch_full_scans && m_id >= next_m_id) {
             impl::foreach_field(ls, zero_field_cols(), next_m_id, m_id);
             zero_header_cols(ls, next_m_id, m_id);
             next_m_id = m_id + 1;
         }
 
         // old header API; will be removed in a future release
-        ls.header(m_id) = {ts, encoder, status};
+        ls.header(lidar_scan_idx) = {ts, encoder, status};
 
         // write new header values
-        ls.timestamp()[m_id] = ts.count();
-        ls.measurement_id()[m_id] = m_id;
-        ls.status()[m_id] = status;
+        ls.timestamp()[lidar_scan_idx] = ts.count();
+        ls.measurement_id()[lidar_scan_idx] = m_id;
+        ls.status()[lidar_scan_idx] = status;
 
-        impl::foreach_field(ls, parse_field_col(), m_id, pf, col_buf);
+        impl::foreach_field(ls, parse_field_col(), lidar_scan_idx, pf, col_buf);
     }
 
     // if not batching full scans, the batch is immediately ready

@@ -479,7 +479,7 @@ class ScanBatcher {
      * 2048.
      * @param[in] pf expected format of the incoming packets used for parsing.
      */
-    ScanBatcher(size_t w, const sensor::packet_format& pf);
+    ScanBatcher(size_t w, const sensor::packet_format& pf, bool batch_full_scans = true);
 
     /**
      * Create a batcher given information about the scan and packet format.

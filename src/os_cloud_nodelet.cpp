@@ -149,7 +149,7 @@ class OusterCloud : public nodelet::Nodelet {
           const uint32_t W = info.format.columns_per_packet;
           ls = ouster::LidarScan{W, H, info.format.udp_profile_lidar};
           cloud = ouster_ros::Cloud{W, H};
-          scan_batcher = std::make_unique<ouster::ScanBatcher>(info, false);
+          scan_batcher = std::make_unique<ouster::ScanBatcher>(W, sensor::get_format(info), false);
 
           const auto xyz_lut_full = ouster::make_xyz_lut(info);
           const int packets_per_frame = info.format.columns_per_frame / info.format.columns_per_packet;
@@ -157,9 +157,9 @@ class OusterCloud : public nodelet::Nodelet {
           {
             const int start_col = it * info.format.columns_per_packet;
             const int num_cols = info.format.columns_per_packet;
-            const ouster::LidarScan::Points direction = xyz_lut_full.direction.middleCols(start_col, num_cols);
-            const ouster::LidarScan::Points offset = xyz_lut_full.offset.middleCols(start_col, num_cols);
-            xyz_luts.emplace_back(direction, offset);
+            auto& cur_lut = xyz_luts.emplace_back();
+            cur_lut.direction = xyz_lut_full.direction.middleCols(start_col, num_cols);
+            cur_lut.offset = xyz_lut_full.offset.middleCols(start_col, num_cols);
           }
         }
 
@@ -259,6 +259,7 @@ class OusterCloud : public nodelet::Nodelet {
 
         for (int i = 0; i < n_returns; ++i) {
 
+            const auto packet_offset = ls.measurement_id()(0);
             bool cloud_ok = false;
             ros::Time cloud_stamp;
             if (deskewing.enabled)
