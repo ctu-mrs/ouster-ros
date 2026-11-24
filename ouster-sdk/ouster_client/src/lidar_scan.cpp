@@ -296,8 +296,8 @@ ScanBatcher::ScanBatcher(size_t w, const sensor::packet_format& pf)
       cache(pf.lidar_packet_size),
       pf(pf) {}
 
-ScanBatcher::ScanBatcher(const sensor::sensor_info& info)
-    : ScanBatcher(info.format.columns_per_frame, sensor::get_format(info)) {}
+ScanBatcher::ScanBatcher(const sensor::sensor_info& info, bool batch_full_scans)
+    : ScanBatcher(info.format.columns_per_frame, sensor::get_format(info)), batch_full_scans(batch_full_scans) {}
 
 namespace {
 
@@ -343,29 +343,43 @@ bool ScanBatcher::operator()(const uint8_t* packet_buf, LidarScan& ls) {
     if (ls.w != w || ls.h != h)
         throw std::invalid_argument("unexpected scan dimensions");
 
-    // process cached packet
-    if (cached_packet) {
-        cached_packet = false;
-        ls.frame_id = -1;
-        this->operator()(cache.data(), ls);
+    if (batch_full_scans)
+    {
+      // process cached packet, if available
+      if (cached_packet) {
+          cached_packet = false;
+          ls.frame_id = -1;
+          this->operator()(cache.data(), ls);
+      }
+
+      // frame id of the new packet
+      const uint16_t f_id = pf.frame_id(packet_buf);
+
+      if (ls.frame_id == -1) {
+          // expecting to start batching a new scan
+          next_m_id = 0;
+          ls.frame_id = f_id;
+      } else if (ls.frame_id == f_id + 1) {
+          // drop reordered packets from the previous frame
+          return false;
+      } else if (ls.frame_id != f_id) {
+          // got a packet from a new frame
+          impl::foreach_field(ls, zero_field_cols(), next_m_id, w);
+          zero_header_cols(ls, next_m_id, w);
+          std::memcpy(cache.data(), packet_buf, cache.size());
+          cached_packet = true;
+          return true;
+      }
     }
-
-    const uint16_t f_id = pf.frame_id(packet_buf);
-
-    if (ls.frame_id == -1) {
-        // expecting to start batching a new scan
-        next_m_id = 0;
-        ls.frame_id = f_id;
-    } else if (ls.frame_id == f_id + 1) {
-        // drop reordered packets from the previous frame
-        return false;
-    } else if (ls.frame_id != f_id) {
-        // got a packet from a new frame
-        impl::foreach_field(ls, zero_field_cols(), next_m_id, w);
-        zero_header_cols(ls, next_m_id, w);
-        std::memcpy(cache.data(), packet_buf, cache.size());
-        cached_packet = true;
-        return true;
+    else
+    {
+      // got a packet from a "new frame" since each packet is a new frame
+      const uint16_t f_id = pf.frame_id(packet_buf);
+      ls.frame_id = f_id;
+      impl::foreach_field(ls, zero_field_cols(), 0, pf.columns_per_packet);
+      zero_header_cols(ls, 0, pf.columns_per_packet);
+      std::memcpy(cache.data(), packet_buf, cache.size());
+      return true;
     }
 
     // parse measurement blocks
@@ -397,7 +411,9 @@ bool ScanBatcher::operator()(const uint8_t* packet_buf, LidarScan& ls) {
 
         impl::foreach_field(ls, parse_field_col(), m_id, pf, col_buf);
     }
-    return false;
+
+    // if not batching full scans, the batch is immediately ready
+    return !batch_full_scans;
 }
 
 }  // namespace ouster

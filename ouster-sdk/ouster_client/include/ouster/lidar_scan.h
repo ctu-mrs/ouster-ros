@@ -467,6 +467,7 @@ class ScanBatcher {
     uint16_t next_m_id;
     std::vector<uint8_t> cache;
     bool cached_packet = false;
+    bool batch_full_scans = true;
 
    public:
     sensor::packet_format pf;  ///< The packet format object used for decoding
@@ -485,7 +486,7 @@ class ScanBatcher {
      *
      * @param[in] info sensor metadata returned from the client.
      */
-    ScanBatcher(const sensor::sensor_info& info);
+    ScanBatcher(const sensor::sensor_info& info, bool batch_full_scans = true);
 
     /**
      * Add a packet to the scan.
